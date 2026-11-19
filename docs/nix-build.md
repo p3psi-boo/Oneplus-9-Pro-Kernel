@@ -23,7 +23,7 @@ nix build --no-update-lock-file --option sandbox true --option sandbox-fallback 
   .#coloros-kernel --out-link result
 ```
 
-`flake.lock` 固定 Nixpkgs。Nix 源码锁文件固定源码内容。
+`flake.lock` 固定 Nixpkgs。Nix 源码锁文件固定源码树的内容。锁文件不包含 `.git` 数据。
 设备清单固定一加内核、厂商模块和 ReSukiSU 的提交。
 工具清单固定 AOSP Clang 11.0.2。隔离编译阶段只读取预先获取的输入。
 Nix 可以复用相同输入的构建产物。本项目不要求外部二进制缓存。

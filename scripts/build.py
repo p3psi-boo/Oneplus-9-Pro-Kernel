@@ -1,16 +1,18 @@
 """Experimental Linux compile; a successful compile is not device validation."""
 import argparse
 import datetime
+import json
 import os
 import pathlib
 import re
 import shutil
+import stat
 import subprocess
 import time
 from kernel_release import SUFFIX, branded_release
 import droidspaces
 from resukisu_source import resolve as resolve_resukisu
-from toolchain import configure, local_git, local_git_env, local_revision
+from toolchain import compiler_tree_sha256, configure, local_git, local_git_env, local_revision
 from prepare_protocol import prepare
 from module_trust import install as install_module_trust, verify_embedded
 from project import ROOT, PATCHES, device, run, save, sha256
@@ -56,6 +58,47 @@ def checkout_local(source, commit, dest, full_history=False):
         raise ValueError("Staged ReSukiSU checkout lost its complete history")
 
 
+def verify_gitless_source(source, commit, lock, role):
+    if lock.get("commit") != commit or not lock.get("tree_sha256"):
+        raise ValueError("No matching Gitless lock for " + role)
+    if compiler_tree_sha256(source) != lock["tree_sha256"]:
+        raise ValueError("Gitless source tree differs from the locked digest: " + role)
+
+
+def stage_gitless_source(source, dest):
+    shutil.copytree(source, dest, symlinks=True)
+    for item in (dest, *dest.rglob("*")):
+        if not item.is_symlink():
+            item.chmod(item.stat().st_mode | stat.S_IWUSR)
+
+
+def adapt_gitless_ksu_version(ksu, lock):
+    """Use the pinned upstream commit metadata without manufacturing a Git repository."""
+    count, tag, commit = lock.get("revision_count"), lock.get("tag"), lock.get("commit")
+    if (not isinstance(count, int) or count < 1 or not isinstance(tag, str)
+            or not re.fullmatch(r"v[0-9]+(?:\.[0-9]+)+", tag)
+            or not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit)):
+        raise ValueError("Invalid Gitless ReSukiSU version lock")
+    dirty = compiler_tree_sha256(ksu) != lock["tree_sha256"]
+    kbuild = ksu / "kernel/Kbuild"
+    text = kbuild.read_text(encoding="utf-8")
+    begin = "LOCAL_GIT_EXISTS :="
+    end = "# call subst to process placeholders"
+    if text.count(begin) != 1 or text.count(end) != 1 or text.index(begin) >= text.index(end):
+        raise ValueError("Unexpected pinned ReSukiSU Kbuild version section")
+    # The legacy checkout is detached and deliberately fetches no tags.
+    # Preserve the probed version count and name, including the dirty flag.
+    metadata = (
+        "ifdef KBUILD_EXTMOD\ninclude $(KSU_SRC)/tools/ddk_compatible.mk\nendif\n\n"
+        f"KSU_LOCAL_VERSION := {count}\n"
+        "KSU_VERSION := $(shell expr 30000 + $(KSU_LOCAL_VERSION) + 700)\n"
+        f"KSU_TAG_NAME := {tag}\n"
+        f"KSU_COMMIT_SHA := {commit[:8]}{'-dirty' if dirty else ''}\n"
+        "KSU_BRANCH_NAME :=\n\n"
+    )
+    kbuild.write_text(text[:text.index(begin)] + metadata + text[text.index(end):], encoding="utf-8")
+
+
 def offline_build_env(source, epoch=None):
     if epoch is None:
         epoch = local_git(source, "log", "-1", "--format=%ct")
@@ -76,6 +119,7 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
         raise RuntimeError("Build on Linux (GitHub Actions or WSL)")
     data = device(name)
     local_sources = {"kernel": kernel_source, "vendor": vendor_source, "resukisu": resukisu_source}
+    gitless_locks = {}
     offline = any(value is not None for value in (*local_sources.values(), clang_source))
     if offline and (not all(value is not None for value in local_sources.values())
                     or clang_source is None or data["platform"] != "sm8350"):
@@ -90,7 +134,9 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
 
     def checkout_stage(role, destination, shallow=True):
         origin = data[role]
-        if offline:
+        if role in gitless_locks:
+            stage_gitless_source(local_sources[role], destination)
+        elif offline:
             checkout_local(local_sources[role], origin["commit"], destination, full_history=not shallow)
         else:
             checkout(origin["repository"], origin["commit"], destination, shallow)
@@ -111,8 +157,17 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
             summary.write("Latest ReSukiSU: [" + data["resukisu"]["commit"] + "](https://github.com/" + data["resukisu"]["repository"] + "/commit/" + data["resukisu"]["commit"] + ")\n\n")
     firmware = data["firmware"][rom]
     if offline:
+        source_locks = json.loads((ROOT / "tools.lock.json").read_text(encoding="utf-8")).get("offline_source_trees", {})
         for role, path in local_sources.items():
-            local_sources[role] = local_revision(path, data[role]["commit"])
+            path = pathlib.Path(path).resolve()
+            commit = data[role]["commit"]
+            if (path / ".git").exists():
+                local_revision(path, commit)
+            else:
+                lock = source_locks.get(role, {})
+                verify_gitless_source(path, commit, lock, role)
+                gitless_locks[role] = lock
+            local_sources[role] = path
     compiler_lock = configure(data["platform"], source=clang_source, work_root=work_root,
                               prepare_command=prepare_clang_command)
     stock_config = config is None
@@ -262,7 +317,11 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
     ):
         with (source / path).open("a", encoding="utf-8") as stream:
             stream.write(addition)
-    env = offline_build_env(source, os.environ.get("SOURCE_DATE_EPOCH")) if offline else dict(os.environ)
+    if "resukisu" in gitless_locks:
+        adapt_gitless_ksu_version(source / "KernelSU", gitless_locks["resukisu"])
+    pinned_epoch = gitless_locks.get("kernel", {}).get("commit_epoch")
+    epoch = os.environ.get("SOURCE_DATE_EPOCH", pinned_epoch)
+    env = offline_build_env(source, epoch) if offline else dict(os.environ)
     env.update(ARCH="arm64", SUBARCH="arm64")
     if prepare_sources_command is not None:
         command = pathlib.Path(prepare_sources_command).resolve()
@@ -396,7 +455,9 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
     if with_droidspaces:
         manifest["droidspaces"] = droidspaces.profile()
     if offline:
-        manifest["source_mode"] = "offline-git"
+        manifest["source_mode"] = "offline-locked-trees" if gitless_locks else "offline-git"
+        if gitless_locks:
+            manifest["offline_source_trees"] = gitless_locks
         manifest["source_date_epoch"] = int(env["SOURCE_DATE_EPOCH"])
         if prepare_clang_command is not None:
             manifest["clang_preparation_sha256"] = sha256(prepare_clang_command)
@@ -416,7 +477,7 @@ if __name__ == "__main__":
                         help="Build the opt-in OnePlus 9 Pro Droidspaces profile")
     for role in ("kernel", "vendor", "resukisu", "clang"):
         parser.add_argument("--" + role + "-source", type=pathlib.Path,
-                            help="Locked local Git checkout for offline " + role + " input")
+                            help="Locked local Git checkout or source tree for offline " + role + " input")
     parser.add_argument("--work-root", type=pathlib.Path, help="Writable work directory root")
     parser.add_argument("--output-root", type=pathlib.Path, help="Writable artifact directory root")
     parser.add_argument("--jobs", type=int, help="Number of parallel make jobs (0 auto-detects)")

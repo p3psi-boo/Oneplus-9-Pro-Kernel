@@ -30,6 +30,15 @@ let
         ${patchelf}/bin/patchelf --set-rpath "$root/lib64:${lib.makeLibraryPath [ stdenv.cc.cc.lib zlib ncurses5 libxml2 ]}" "$binary"
       fi
     done < <(find "$root/bin" "$root/lib64" -type f -print0)
+    # AOSP LLD 11 supports --no-threads, not newer --threads=N syntax.
+    # Bound final LTO memory without disabling LTO, CFI, or ABI checks.
+    test -L "$root/bin/ld.lld"
+    rm "$root/bin/ld.lld"
+    cat > "$root/bin/ld.lld" <<EOF
+#!${stdenv.shell}
+exec "$root/bin/lld" -flavor gnu --no-threads --thinlto-jobs=1 "\$@"
+EOF
+    chmod +x "$root/bin/ld.lld"
   '';
   hostClang = writeShellScript "nix-host-cfi-clang" ''
     exec clang \
@@ -72,10 +81,6 @@ in stdenv.mkDerivation {
     runHook preBuild
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
-    # Immutable Nix store checkouts belong to the store owner, not the builder.
-    for source in ${sources.kernel} ${sources.vendor} ${sources.resukisu} ${sources.clang}; do
-      git config --global --add safe.directory "$source"
-    done
     export SOURCE_DATE_EPOCH=1735689600
     export HOST_CLANG=${hostClang}
     python3 scripts/build.py --device oneplus-9-pro --os coloros --droidspaces \

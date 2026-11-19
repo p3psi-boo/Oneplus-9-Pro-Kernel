@@ -6,13 +6,13 @@ let
   source = role: url: rev: extra: fetchgit ({
     inherit url rev;
     hash = hashes.${role};
-    leaveDotGit = true;
+    leaveDotGit = false;
     fetchSubmodules = false;
   } // extra);
 in {
   kernel = source "kernel" "https://github.com/${device.kernel.repository}.git" device.kernel.commit {};
   vendor = source "vendor" "https://github.com/${device.vendor.repository}.git" device.vendor.commit {};
-  resukisu = source "resukisu" "https://github.com/${device.resukisu.repository}.git" device.resukisu.commit { deepClone = true; };
+  resukisu = source "resukisu" "https://github.com/${device.resukisu.repository}.git" device.resukisu.commit {};
   clang = source "clang" tools.android_clang.repository tools.android_clang.commit {
     sparseCheckout = [ tools.android_clang.directory ];
     leaveDotGit = false;

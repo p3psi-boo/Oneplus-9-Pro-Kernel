@@ -8,7 +8,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from build import build, checkout_local, offline_build_env
+from build import adapt_gitless_ksu_version, build, checkout_local, offline_build_env, stage_gitless_source, verify_gitless_source
 from toolchain import compiler_tree_sha256, configure, local_git, local_revision
 
 
@@ -56,6 +56,43 @@ class OfflineInputsTests(unittest.TestCase):
         checkout_local(shallow, self.head, staged)
         self.assertEqual(local_revision(staged, self.head), staged)
         self.assertEqual(local_git(staged, "rev-parse", "--is-shallow-repository"), "true")
+
+    def test_gitless_source_rejects_wrong_pin_and_changed_tree(self):
+        path = self.root / "gitless"
+        path.mkdir()
+        sample = path / "tracked"
+        sample.write_text("pinned")
+        commit = "2" * 40
+        lock = {"commit": commit, "tree_sha256": compiler_tree_sha256(path)}
+        verify_gitless_source(path, commit, lock, "vendor")
+        with self.assertRaisesRegex(ValueError, "No matching Gitless lock"):
+            verify_gitless_source(path, "3" * 40, lock, "vendor")
+        dest = self.root / "stage"
+        sample.chmod(0o444)
+        stage_gitless_source(path, dest)
+        (dest / "tracked").write_text("editor can patch copy")
+        self.assertEqual(sample.read_text(), "pinned")
+        self.assertFalse((dest / ".git").exists())
+        with self.assertRaisesRegex(ValueError, "locked digest"):
+            verify_gitless_source(dest, commit, lock, "vendor")
+
+    def test_gitless_resukisu_replaces_only_version_probes(self):
+        kbuild = self.root / "staged-ksu/kernel/Kbuild"
+        kbuild.parent.mkdir(parents=True)
+        before = "GIT_BIN := git\n"
+        after = "# call subst to process placeholders\n# Build options\n"
+        kbuild.write_text(before + "LOCAL_GIT_EXISTS := original probes\n" + after)
+        lock = {"commit": "39faf94a" + "0" * 32, "tree_sha256": compiler_tree_sha256(kbuild.parent.parent),
+                "revision_count": 4537, "tag": "v4.1.0"}
+        kbuild.write_text(kbuild.read_text() + "# changed trackable source\n")
+        adapt_gitless_ksu_version(kbuild.parent.parent, lock)
+        result = kbuild.read_text()
+        self.assertTrue(result.startswith(before))
+        self.assertIn(after, result)
+        self.assertNotIn("LOCAL_GIT_EXISTS", result)
+        self.assertIn("KSU_LOCAL_VERSION := 4537", result)
+        self.assertIn("KSU_COMMIT_SHA := 39faf94a-dirty", result)
+        self.assertIn("KSU_TAG_NAME := v4.1.0", result)
 
     def test_wrong_or_partial_inputs_fail_before_fetch(self):
         with self.assertRaisesRegex(ValueError, "commit mismatch"):

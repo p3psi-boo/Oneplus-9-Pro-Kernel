@@ -26,7 +26,9 @@ class TwrpWorkflowTests(unittest.TestCase):
     def test_only_locked_nix_build_can_feed_the_packager(self):
         for value in ("sandbox-fallback = false", "--option sandbox true --option sandbox-fallback false",
                       "--no-update-lock-file", ".#coloros-kernel", '"source_mode"',
-                      'm.get("source_mode") == "offline-git"', '"--built", "out/nix-coloros"'):
+                      'm.get("source_mode") != "offline-locked-trees"',
+                      'm.get("offline_source_trees") != inputs["offline_source_trees"]',
+                      'm.get("compiler_lock") != inputs["android_clang"]', '"--built", "out/nix-coloros"'):
             self.assertIn(value, self.text)
         self.assertNotIn("continue-on-error", self.text)
 
@@ -67,10 +69,11 @@ class TwrpWorkflowTests(unittest.TestCase):
 
     def test_embedded_python_is_valid(self):
         lines = self.text.splitlines()
-        starts = [i for i, line in enumerate(lines) if line.strip() == "python3 - <<'PY'"]
-        self.assertEqual(len(starts), 2)
-        for start in starts:
-            end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "PY")
+        starts = [(i, line.strip().split("'")[1]) for i, line in enumerate(lines)
+                  if line.strip().startswith("python3 - <<'")]
+        self.assertEqual(len(starts), 3)
+        for start, marker in starts:
+            end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == marker)
             compile("\n".join(line[10:] for line in lines[start + 1:end]), "<workflow>", "exec")
 
 

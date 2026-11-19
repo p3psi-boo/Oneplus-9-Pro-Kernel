@@ -52,7 +52,16 @@ jobs:
           mkdir -p out/nix-coloros
           cp -Lr "$RUNNER_TEMP/coloros-nix-kernel/." out/nix-coloros/
           chmod -R u+w out/nix-coloros
-          python3 -c 'import json; m = json.load(open("out/nix-coloros/build.json")); raise SystemExit(0 if m.get("source_mode") == "offline-git" else "Missing offline source provenance")'
+          python3 - <<'PYCODE'
+          import json
+          from pathlib import Path
+          m = json.loads(Path("out/nix-coloros/build.json").read_text())
+          inputs = json.loads(Path("tools.lock.json").read_text())
+          if (m.get("source_mode") != "offline-locked-trees"
+                  or m.get("offline_source_trees") != inputs["offline_source_trees"]
+                  or m.get("compiler_lock") != inputs["android_clang"]):
+              raise SystemExit("Missing exact locked source provenance")
+          PYCODE
       - name: Verify the kernel against the exact official ColorOS boot
         run: |
           set -euo pipefail
