@@ -20,4 +20,5 @@ GitHub Actions 只为 ColorOS `LE2120_14.0.0.1901(CN01)` 生成 TWRP 安装包�
 
 - [TWRP 安装与恢复说明](docs/twrp-packaging.md)
 - [Droidspaces 与 ranet3 说明](docs/droidspaces.md)
+- [Nix 构建与验证](docs/nix-build.md)
 - [许可证](LICENSE)

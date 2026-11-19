@@ -52,7 +52,14 @@ def canonicalize_oneof_members(text, messages):
     return text
 
 
-def prepare(modules, profile):
+def prepare(modules, profile, *, host_clang=None):
+    host_compiler = "clang"
+    host_compiler_sha256 = None
+    if host_clang is not None:
+        host_compiler = pathlib.Path(host_clang)
+        if not host_compiler.is_absolute() or not host_compiler.is_file():
+            raise ValueError("Host clang helper must be an absolute executable path")
+        host_compiler_sha256 = sha256(host_compiler)
     directory = protocol_directory(profile)
     schema = directory / "netlink_msg.proto"
     reflection = directory / "protocol-reflection.json"
@@ -123,12 +130,15 @@ def prepare(modules, profile):
                 + 'ProtobufCMessage *m = malloc(d->sizeof_message); if (!m) return 1;'
                 + 'd->message_init(m); if (m->descriptor != d) return 2; free(m); } return 0; }\n')
             executable = work / "cfi_check"
-            run("clang", "-O2", "-flto", "-fuse-ld=lld", "-fsanitize=cfi-icall", "-fvisibility=hidden",
+            run(host_compiler, "-O2", "-flto", "-fuse-ld=lld", "-fsanitize=cfi-icall", "-fvisibility=hidden",
                 str(generated), str(harness), "-lprotobuf-c", "-o", str(executable))
             run(executable)
         header.write_text(text.replace(include, '#ifndef assert\n#define assert(condition) ((void)0)\n#endif\n#include "../comm_netlink/protobuf-c.h"'))
         for filename in ("netlink_msg.pb-c.h", "netlink_msg.pb-c.c"):
             shutil.copyfile(work / filename, destination / filename)
-    return {"cfi_safe_initializers": cfi_safe, "schema_sha256": sha256(schema), "reflection_sha256": sha256(reflection),
-            "stock_boot_sha256": expected["stock_boot_sha256"], "message_count": len(expected["messages"]),
-            "origin": "recovered stock protobuf-c reflection metadata"}
+    receipt = {"cfi_safe_initializers": cfi_safe, "schema_sha256": sha256(schema), "reflection_sha256": sha256(reflection),
+               "stock_boot_sha256": expected["stock_boot_sha256"], "message_count": len(expected["messages"]),
+               "origin": "recovered stock protobuf-c reflection metadata"}
+    if cfi_safe and host_compiler_sha256 is not None:
+        receipt["cfi_host_clang_sha256"] = host_compiler_sha256
+    return receipt

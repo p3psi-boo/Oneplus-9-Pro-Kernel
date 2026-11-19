@@ -97,10 +97,15 @@ BusyBox or real block-device behavior. No device flashing was performed.
 4. Download `twrp-experimental-oneplus-9-pro-coloros-<run number>`.
 5. Extract the GitHub artifact wrapper.
 
+The default path uses the native build. To opt in to the Nix build, also select
+`nix_coloros`. The Nix workflow checks parity before it can upload a ZIP.
+See [Nix build and validation](nix-build.md).
+
 The inner `*-twrp.zip` is the TWRP package. The adjacent `.zip.sha256`
 file checks that package. Do not flash the GitHub artifact wrapper.
 
-The workflow builds both ROM variants for compile checks. Only the ColorOS job
+Regular compile checks build both ROM variants. An opt-in Nix run builds
+only ColorOS. Only the ColorOS job
 fetches the exact official stock boot, verifies the boot and ABI, and uploads a
 TWRP package. The OxygenOS job produces a raw kernel review artifact only.
 The workflow publishes no GitHub Release. ZIP artifacts expire after 14 days.

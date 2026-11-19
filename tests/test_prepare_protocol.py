@@ -3,7 +3,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from prepare_protocol import canonicalize_oneof_members
+from prepare_protocol import canonicalize_oneof_members, prepare
 
 
 HEADER = """struct Example
@@ -39,3 +39,10 @@ class OneofDeclarationTests(unittest.TestCase):
     def test_unexpected_union_format_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unexpected generated protobuf oneof union"):
             canonicalize_oneof_members(HEADER.replace("union {", "union Missing {"), MESSAGES)
+
+
+class HostClangTests(unittest.TestCase):
+    def test_host_helper_must_be_explicit_path(self):
+        for path in ("clang", "/nonexistent/clang"):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "absolute executable"):
+                prepare(pathlib.Path("unused"), {}, host_clang=path)

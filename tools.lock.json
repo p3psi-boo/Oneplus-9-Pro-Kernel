@@ -9,6 +9,7 @@
     "repository": "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86",
     "commit": "659f7cadd7ec920e470bffbb799b031d4344c8d9",
     "directory": "clang-r383902b1",
-    "version_string": "Android (6877366 based on r383902b1) clang version 11.0.2"
+    "version_string": "Android (6877366 based on r383902b1) clang version 11.0.2",
+    "tree_sha256": "1651434e2f0ed098c8bd2b208f040268ea647c17175ba7d1f87f3ffb7c5136cc"
   }
 }

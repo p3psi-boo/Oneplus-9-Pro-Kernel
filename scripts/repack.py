@@ -25,6 +25,23 @@ def boot_header(path):
         raise ValueError("Not a supported Android boot image")
     return int.from_bytes(data[40:44], "little")
 
+def stock_unpacker(work, tools):
+    """Materialize the pinned Magiskboot binary for host-side verification."""
+    apk = work / "magisk.apk"
+    cached = ROOT / ".work/tools/Magisk-v30.7.apk"
+    if cached.is_file() and sha256(cached) == tools["sha256"]:
+        shutil.copyfile(cached, apk)
+    else:
+        urllib.request.urlretrieve(tools["url"], apk)
+    if sha256(apk) != tools["sha256"]:
+        raise ValueError("Magisk tool checksum mismatch")
+    with zipfile.ZipFile(apk) as archive:
+        binary = work / "magiskboot"
+        binary.write_bytes(archive.read(tools["member"]))
+    binary.chmod(0o755)
+    return binary
+
+
 def repack(args):
     data = device(args.device)
     known = data["firmware"][args.os]["layout"]
@@ -107,18 +124,7 @@ def repack(args):
         raise ValueError("Refusing to overwrite an existing firmware artifact directory")
     with tempfile.TemporaryDirectory() as temp:
         work = pathlib.Path(temp)
-        apk = work / "magisk.apk"
-        cached = ROOT / ".work/tools/Magisk-v30.7.apk"
-        if cached.is_file() and sha256(cached) == tools["sha256"]:
-            shutil.copyfile(cached, apk)
-        else:
-            urllib.request.urlretrieve(tools["url"], apk)
-        if sha256(apk) != tools["sha256"]:
-            raise ValueError("Magisk tool checksum mismatch")
-        with zipfile.ZipFile(apk) as archive:
-            binary = work / "magiskboot"
-            binary.write_bytes(archive.read(tools["member"]))
-        binary.chmod(0o755)
+        binary = stock_unpacker(work, tools)
         original, verify = work / "original", work / "verify"
         original.mkdir()
         verify.mkdir()
