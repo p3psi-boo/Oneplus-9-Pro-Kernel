@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import time
 from kernel_release import SUFFIX, branded_release
+import droidspaces
 from resukisu_source import resolve as resolve_resukisu
 from toolchain import configure
 from prepare_protocol import prepare
@@ -37,10 +38,19 @@ def checkout(repo, commit, dest, shallow=True):
             time.sleep(10 + attempt * 15)
     raise RuntimeError("checkout failed for " + repo + ": " + str(last))
 
-def build(name, config=None, rom='coloros', diagnostics_only=False):
+def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidspaces=False):
     if os.name != "posix":
         raise RuntimeError("Build on Linux (GitHub Actions or WSL)")
     data = device(name)
+    if with_droidspaces:
+        droidspaces.require_device(data)
+        if config is not None:
+            raise ValueError("Droidspaces requires the registered stock seed config")
+        if os.environ.get("SUSFS") == "1":
+            raise ValueError("Droidspaces profile does not support building with SUSFS")
+    artifact_root = ROOT / "out" / name / rom
+    if with_droidspaces:
+        artifact_root = ROOT / "out" / "droidspaces" / name / rom
     resukisu_selection = {"mode": "pinned", "baseline_commit": data["resukisu"]["commit"], "requested_ref": "pinned", "resolved_ref": "refs/heads/pinned"}
     print("Latest ReSukiSU:", data["resukisu"]["repository"], data["resukisu"]["commit"], flush=True)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -87,6 +97,8 @@ def build(name, config=None, rom='coloros', diagnostics_only=False):
             target.symlink_to(os.readlink(item))
         else:
             shutil.copyfile(item, target)
+    if with_droidspaces:
+        droidspaces.apply_patch(source)
     want_susfs = os.environ.get("SUSFS") == "1"
     print("SUSFS: " + ("enabled" if want_susfs else "disabled"), flush=True)
     susfs_patch = ROOT / "patches" / "susfs-v2.patch"
@@ -95,10 +107,17 @@ def build(name, config=None, rom='coloros', diagnostics_only=False):
         subprocess.run(["patch", "-p1", "-F3", "--forward", "-i", str(susfs_patch)],
                        cwd=source, check=False, text=True)
     patch = ROOT / "patches" / (PATCHES[name] + ".patch")
-    subprocess.run(["patch", "-p1", "-F3", "--forward", "-i", str(patch)], cwd=source, check=False)
     compat_patch = ROOT / "patches" / ("compat-" + data["platform"] + ".patch")
+    kernel_patches = [patch]
     if compat_patch.exists():
-        subprocess.run(["patch", "-p1", "-F3", "--forward", "-i", str(compat_patch)], cwd=source, check=False)
+        kernel_patches.append(compat_patch)
+    for kernel_patch in kernel_patches:
+        if with_droidspaces:
+            run("git", "apply", "--check", kernel_patch, cwd=source)
+            run("git", "apply", kernel_patch, cwd=source)
+        else:
+            subprocess.run(["patch", "-p1", "-F3", "--forward", "-i", str(kernel_patch)],
+                           cwd=source, check=False)
     for rel, fname in (("include/linux/susfs.h", "susfs.h"), ("include/linux/susfs_def.h", "susfs_def.h"),
                        ("fs/susfs.c", "susfs.c")):
         if not want_susfs:
@@ -260,19 +279,25 @@ def build(name, config=None, rom='coloros', diagnostics_only=False):
             stream.write('CONFIG_LOCALVERSION="' + release[len(data["kernel"]["version"]):] + '"\n')
             stream.write("# CONFIG_LOCALVERSION_AUTO is not set\n")
 
+    if with_droidspaces:
+        droidspaces.merge_config(output / ".config")
     run(*options, "olddefconfig", env=env)
+    if with_droidspaces:
+        droidspaces.verify_config(output / ".config", config)
     final_config = (output / ".config").read_text()
     for required in ("CONFIG_KSU=y", "CONFIG_KALLSYMS_ALL=y", "CONFIG_MODVERSIONS=y"):
         if required not in final_config.splitlines():
             raise RuntimeError("Kconfig dropped required option: " + required)
     run(*options, "-j" + str(os.cpu_count() or 2), "KBUILD_SYMTYPES=1", "net/oplus_modules/data_module/", env=env)
+    if with_droidspaces:
+        droidspaces.verify_protocol_crc(output)
     if name == "oneplus-8t":
         run(*options, "-j" + str(os.cpu_count() or 2), "net/ipv4/route.o",
             "net/ipv6/route.o", "net/xfrm/xfrm_policy.o", env=env)
     if diagnostics_only:
         if data["platform"] == "sm8250":
             run(*options, "KBUILD_SYMTYPES=1", "drivers/input/touchscreen/touch.o", env=env)
-        dest = ROOT / "out" / name / rom / "abi-types"
+        dest = artifact_root / "abi-types"
         dest.mkdir(parents=True, exist_ok=True)
         for item in output.rglob("*.symtypes"):
             target = dest / item.relative_to(output)
@@ -293,7 +318,7 @@ def build(name, config=None, rom='coloros', diagnostics_only=False):
     image = output / "arch/arm64/boot/Image"
     if not image.is_file() or image.stat().st_size < 1024:
         raise RuntimeError("Kernel image missing")
-    dest = ROOT / "out" / name / rom
+    dest = artifact_root
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(image, dest / "Image")
     shutil.copyfile(output / ".config", dest / "kernel.config")
@@ -301,11 +326,14 @@ def build(name, config=None, rom='coloros', diagnostics_only=False):
         if (output / diagnostic).is_file():
             shutil.copyfile(output / diagnostic, dest / diagnostic)
     compiler = subprocess.check_output(["clang", "--version"], text=True)
-    save(dest / "build.json", {"device": name, "os": rom, "firmware": firmware["build_id"], "kernel_release": actual_release, "stock_kernel_release": stock_release, "kernel_release_suffix": SUFFIX, "kernel": data["kernel"], "resukisu": data["resukisu"], "resukisu_selection": resukisu_selection,
+    manifest = {"device": name, "os": rom, "firmware": firmware["build_id"], "kernel_release": actual_release, "stock_kernel_release": stock_release, "kernel_release_suffix": SUFFIX, "kernel": data["kernel"], "resukisu": data["resukisu"], "resukisu_selection": resukisu_selection,
         "compat_patch_sha256": sha256(compat_patch) if compat_patch.exists() else None, "vendor_patch_sha256": sha256(vendor_patch) if vendor_patch.exists() else None, "vendor": data["vendor"], "patch_sha256": sha256(patch), "image_sha256": sha256(image), "compiler": compiler, "compiler_lock": compiler_lock, "stock_protocol": protocol, "linker": subprocess.check_output([linker, "--version"], text=True).splitlines()[0], "native_features": native_features,
         "module_trust": module_trust, "config_sha256": sha256(output / ".config"), "stock_config_supplied": stock_config, "config_translations": translations,
-        "compile_verified": True, "device_verified": False})
+        "compile_verified": True, "device_verified": False}
+    if with_droidspaces:
+        manifest["droidspaces"] = droidspaces.profile()
     verify_embedded(firmware, dest)
+    save(dest / "build.json", manifest)
     print("Compile complete; boot packaging and on-device checks remain.")
 
 if __name__ == "__main__":
@@ -314,5 +342,7 @@ if __name__ == "__main__":
     parser.add_argument("--os", choices=("coloros", "oxygenos"), default="coloros")
     parser.add_argument("--config", type=pathlib.Path, help="Uncompressed config from the matching stock kernel")
     parser.add_argument("--diagnostics-only", action="store_true")
+    parser.add_argument("--droidspaces", action="store_true",
+                        help="Build the opt-in OnePlus 9 Pro Droidspaces profile")
     args = parser.parse_args()
-    build(args.device, args.config, args.os, args.diagnostics_only)
+    build(args.device, args.config, args.os, args.diagnostics_only, args.droidspaces)

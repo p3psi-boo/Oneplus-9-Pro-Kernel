@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 from check_module_abi import compare
+import droidspaces
 from kernel_release import validate_release
 from resukisu_source import validate_manifest as validate_resukisu
 from module_trust import verify_embedded, verify_modules
@@ -46,7 +47,23 @@ def repack(args):
         raise ValueError("No matching successful build")
     if any(manifest.get(key) != data[key] for key in ("kernel", "vendor")):
         raise ValueError("Stale build: source profile changed")
-    validate_resukisu(manifest, data["resukisu"])
+    droidspaces_build = "droidspaces" in manifest
+    if droidspaces_build:
+        droidspaces.require_device(data)
+        if not args.built or not args.output:
+            raise ValueError("Droidspaces packaging requires explicit --built and --output directories")
+        if manifest["droidspaces"] != droidspaces.profile():
+            raise ValueError("Stale Droidspaces build: profile inputs changed")
+        stock_config = ROOT / registered["config"]
+        if sha256(stock_config) != registered["config_sha256"]:
+            raise ValueError("Registered stock config checksum mismatch")
+        droidspaces.verify_config(built / "kernel.config", stock_config)
+        selection = {"mode": "pinned", "baseline_commit": data["resukisu"]["commit"],
+                     "requested_ref": "pinned", "resolved_ref": "refs/heads/pinned"}
+        if manifest.get("resukisu") != data["resukisu"] or manifest.get("resukisu_selection") != selection:
+            raise ValueError("Stale Droidspaces build: pinned ReSukiSU source changed")
+    else:
+        validate_resukisu(manifest, data["resukisu"])
     vendor_name = {"oneplus-8-pro": "oneplus-8", "oneplus-9-pro": "oneplus-9"}.get(args.device, args.device)
     expected_patches = {
         "patch_sha256": ROOT / "patches" / (PATCHES[args.device] + ".patch"),
@@ -84,7 +101,7 @@ def repack(args):
     if inventory.exists():
         signature_check = verify_modules(registered, built, inventory)
     tools = json.loads((ROOT / "tools.lock.json").read_text())["magiskboot"]
-    revision = registered.get("artifact_revision")
+    revision = "droidspaces-experimental" if droidspaces_build else registered.get("artifact_revision")
     dest = args.output.resolve() if getattr(args, "output", None) else ROOT / "out" / args.device / (args.os + "-" + args.firmware + ("-" + revision if revision else ""))
     if dest.exists():
         raise ValueError("Refusing to overwrite an existing firmware artifact directory")
@@ -107,7 +124,7 @@ def repack(args):
         verify.mkdir()
         run(binary, "unpack", "-h", stock, cwd=original)
         abi_path = built / "abi-report.json"
-        if not abi_path.is_file():
+        if droidspaces_build or not abi_path.is_file():
             stock_map = work / "stock.map"
             with stock_map.open("wb") as stream:
                 subprocess.run([sys.executable, str(ROOT / "scripts/recover_symbols.py"),
