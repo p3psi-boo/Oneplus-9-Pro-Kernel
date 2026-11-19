@@ -42,7 +42,7 @@ S3908 息屏单击手势修复已收录于 v0.2.0，范围与验证说明见 [�
 
 ## 一加 9 Pro：Droidspaces（实验性）
 
-需要 Linux 容器时可单独构建 Droidspaces 配置；默认内核构建不变。请先阅读 [构建、原厂 ABI 对照及实测范围](docs/droidspaces.md)。
+需要 Linux 容器时可单独构建 Droidspaces 配置，默认构建不会启用该配置。为保留原厂模块版本检查，普通构建和 Droidspaces 构建均禁用强制加载内核模块。请先阅读 [构建、原厂 ABI 对照及实测范围](docs/droidspaces.md)。
 
 ## 分支和构建
 

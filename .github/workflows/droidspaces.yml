@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/droidspaces.yml'
       - 'configs/droidspaces-sm8350.config'
+      - 'configs/resukisu.config'
       - 'patches/droidspaces-sm8350-ipc-kabi.patch'
       - 'scripts/build.py'
       - 'scripts/droidspaces.py'
