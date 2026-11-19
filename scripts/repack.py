@@ -1,6 +1,7 @@
 """Replace only the kernel in an explicitly identified stock boot image."""
 import argparse
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -29,7 +30,10 @@ def stock_unpacker(work, tools):
     """Materialize the pinned Magiskboot binary for host-side verification."""
     apk = work / "magisk.apk"
     cached = ROOT / ".work/tools/Magisk-v30.7.apk"
-    if cached.is_file() and sha256(cached) == tools["sha256"]:
+    nix_apk = os.environ.get("COLOROS_MAGISK_APK")
+    if nix_apk is not None:
+        shutil.copyfile(nix_apk, apk)
+    elif cached.is_file() and sha256(cached) == tools["sha256"]:
         shutil.copyfile(cached, apk)
     else:
         urllib.request.urlretrieve(tools["url"], apk)
@@ -129,7 +133,7 @@ def repack(args):
         original.mkdir()
         verify.mkdir()
         run(binary, "unpack", "-h", stock, cwd=original)
-        abi_path = built / "abi-report.json"
+        abi_path = (work if droidspaces_build else built) / "abi-report.json"
         if droidspaces_build or not abi_path.is_file():
             stock_map = work / "stock.map"
             with stock_map.open("wb") as stream:

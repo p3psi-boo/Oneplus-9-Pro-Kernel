@@ -15,6 +15,7 @@ import droidspaces
 from kernel_release import validate_release
 from project import ROOT, device, sha256
 
+COLOROS_STOCK_EXPORTS = 13_797
 PIN = "41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1"
 
 
@@ -23,7 +24,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def qualify(built, qualified, rom):
+def qualify(built, qualified, rom, source_commit=None, *, required_origin=None):
     data = device("oneplus-9-pro")
     droidspaces.require_device(data)
     fw = data["firmware"][rom]
@@ -33,6 +34,15 @@ def qualify(built, qualified, rom):
     require(manifest.get("device") == "oneplus-9-pro" and manifest.get("os") == rom
             and manifest.get("firmware") == fw["build_id"], "Wrong exact model/OS/firmware")
     require(all(manifest.get(k) == v for k, v in original.items()), "Qualification differs from compiled manifest")
+    if source_commit is not None and "source_commit" in original:
+        require(original["source_commit"] == source_commit, "Compiled build belongs to another source commit")
+    if required_origin is not None:
+        require(manifest.get("qualification_origin") == required_origin,
+                "Qualification has no matching locked build identity")
+    if "qualification_origin" in manifest:
+        require(manifest["qualification_origin"] == {
+            "source_commit": source_commit, "build_manifest_sha256": sha256(built / "build.json"),
+        }, "Qualification belongs to another build manifest or source commit")
     require(manifest.get("compile_verified") is True and manifest.get("abi_compatible") is True,
             "Build/ABI qualification missing")
     require(manifest.get("partition_layout") == "a/b", "Qualification not A/B")
@@ -46,6 +56,9 @@ def qualify(built, qualified, rom):
     require((qualified / "boot.img").stat().st_size == fw["stock_boot_size"], "Qualified boot is not full partition size")
     abi = manifest.get("export_crc_check") or {}
     require(abi.get("passed") is True and not abi.get("missing") and not abi.get("mismatch"), "Stock export CRC mismatch")
+    if rom == "coloros":
+        require(abi.get("matching") == abi.get("stock_exports") == COLOROS_STOCK_EXPORTS,
+                "Expected all 13,797 official ColorOS export CRCs to match")
     require(abi.get("image_sha256") == manifest["image_sha256"]
             and abi.get("system_map_sha256") == sha256(built / "System.map"), "ABI report belongs to another kernel/map")
     require((manifest.get("module_signature_check") or {}).get("passed") is True, "Module trust checks missing")
@@ -70,17 +83,21 @@ def upstream_files(upstream):
     return files, lock
 
 
-def package(built, qualified, rom, upstream, output, source_commit, ci_run):
+def package(built, qualified, rom, upstream, output, source_commit, ci_run, *, required_origin=None):
     require(rom in ("coloros", "oxygenos"), "Unknown ROM")
     require(re.fullmatch(r"[0-9a-f]{40}", source_commit) is not None, "Full source commit required")
     require(re.fullmatch(r"[0-9]+", ci_run) is not None, "Numeric CI run required")
-    fw, manifest = qualify(built, qualified, rom)
+    fw, manifest = qualify(built, qualified, rom, source_commit, required_origin=required_origin)
     files, lock = upstream_files(upstream)
     for name, target in (("update-binary", "META-INF/com/google/android/update-binary"),
                          ("anykernel.sh", "anykernel.sh"), ("guard.sh", "guard.sh")):
         files[target] = (ROOT / "scripts/twrp" / name).read_bytes()
     files["META-INF/com/google/android/updater-script"] = b"#AK3\n"
-    files["boot.img"] = (qualified / "boot.img").read_bytes()
+    payload = (qualified / "boot.img").read_bytes()
+    require(len(payload) == fw["stock_boot_size"]
+            and hashlib.sha256(payload).hexdigest() == manifest["boot_sha256"],
+            "Qualified boot changed during packaging")
+    files["boot.img"] = payload
     # All values originate in the reviewed local device profile / hash-checked manifest.
     for value in (fw["build_id"], rom):
         require(re.fullmatch(r"[A-Za-z0-9._()-]+", value) is not None, "Unsafe firmware metadata")

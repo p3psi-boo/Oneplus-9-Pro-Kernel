@@ -54,6 +54,11 @@ EOF
     # Reuse stdenv's exact interpreter resolver after source integrity checks.
     source ${stdenv}/setup
     patchShebangs --build "$1" "$2" "$(readlink -f "$3")"
+    # This Kconfig probe links a HOST executable, unlike target compilation.
+    # Actually test the same pinned clang with Nix host libc paths; do not force
+    # CC_CAN_LINK/UAPI_HEADER_TEST or change the target compiler flags.
+    substituteInPlace "$1/init/Kconfig" \
+      --replace-fail '$(srctree)/scripts/cc-can-link.sh $(CC)' '$(srctree)/scripts/cc-can-link.sh $(HOST_CLANG)'
     substituteInPlace "$3/kernel/Kbuild" \
       --replace-fail 'GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git' 'GIT_BIN := git'
   '';
@@ -77,6 +82,9 @@ in stdenv.mkDerivation {
   dontConfigure = true;
   dontFixup = true; # Never strip or alter a verified kernel or its manifest.
   enableParallelBuilding = true;
+  # Only a clean Git-backed flake has rev. Path/dirty evaluations must not claim
+  # provenance they cannot establish; downstream qualification rejects null.
+  sourceCommitJSON = builtins.toJSON (project.rev or null);
   buildPhase = ''
     runHook preBuild
     export HOME="$TMPDIR/home"
@@ -95,6 +103,16 @@ in stdenv.mkDerivation {
   installPhase = ''
     mkdir -p "$out"
     cp -a "$TMPDIR/artifacts/droidspaces/oneplus-9-pro/coloros/." "$out/"
+    python3 - "$out/build.json" <<'PY'
+import json, os, pathlib, re, sys
+path = pathlib.Path(sys.argv[1])
+manifest = json.loads(path.read_text())
+revision = json.loads(os.environ["sourceCommitJSON"])
+if revision is not None and not re.fullmatch(r"[0-9a-f]{40}", revision):
+    raise SystemExit("Invalid clean Git source revision")
+manifest["source_commit"] = revision
+path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+PY
     for required in Image build.json kernel.config System.map Module.symvers; do
       test -s "$out/$required"
     done

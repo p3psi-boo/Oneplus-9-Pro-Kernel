@@ -22,18 +22,35 @@ on:
       - 'devices/oneplus-9-pro.json'
       - 'tools.lock.json'
       - 'anykernel3.lock.json'
+      - 'docs/twrp-packaging.md'
 permissions:
   contents: read
+concurrency:
+  group: coloros-nix-${{ github.sha }}
+  cancel-in-progress: false
 jobs:
   coloros:
     if: github.ref == 'refs/heads/oneplus-9-pro'
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    env:
+      SOURCE_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Check runner resources and prepare a disk-backed Nix build directory
+        run: |
+          set -euo pipefail
+          sudo install -d -o root -g root -m 0755 /var/tmp/nix-coloros-build
+          free -h
+          df -h /var/tmp/nix-coloros-build /
+          fs_type="$(findmnt -n -o FSTYPE -T /var/tmp/nix-coloros-build)"
+          echo "Nix build filesystem: $fs_type"
+          case "$fs_type" in
+            tmpfs|ramfs) echo "::error::Nix build directory must be disk-backed"; exit 1 ;;
+          esac
       - name: Install Nix with sandbox enforcement
         uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
         with:
@@ -42,43 +59,48 @@ jobs:
           extra_nix_config: |
             sandbox = true
             sandbox-fallback = false
-      - name: Verify the locked Linux development shell
-        run: nix develop --no-update-lock-file -c python3 -m unittest discover -s tests -v
+            build-dir = /var/tmp/nix-coloros-build
+      - name: Check workflow syntax and run the offline packaging regression tests
+        run: |
+          set -euo pipefail
+          nix develop --no-update-lock-file -c actionlint .github/workflows/droidspaces.yml
+          nix develop --no-update-lock-file -c python3 -m unittest discover -s tests -v
+          nix run --no-update-lock-file .#coloros-pipeline -- --help
+      - name: Restore the previously qualified kernel for this exact commit
+        id: kernel_cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: out/nix-coloros
+          key: coloros-nix-verified-v1-${{ runner.os }}-${{ github.sha }}
       - name: Build the locked ColorOS kernel in the Nix sandbox
+        if: steps.kernel_cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           nix build --no-update-lock-file --option sandbox true --option sandbox-fallback false \
-            .#coloros-kernel --out-link "$RUNNER_TEMP/coloros-nix-kernel"
+            --print-build-logs .#coloros-kernel --out-link "$RUNNER_TEMP/coloros-nix-kernel"
+          rm -rf -- out/nix-coloros
           mkdir -p out/nix-coloros
           cp -Lr "$RUNNER_TEMP/coloros-nix-kernel/." out/nix-coloros/
           chmod -R u+w out/nix-coloros
-          python3 - <<'PYCODE'
-          import json
-          from pathlib import Path
-          m = json.loads(Path("out/nix-coloros/build.json").read_text())
-          inputs = json.loads(Path("tools.lock.json").read_text())
-          if (m.get("source_mode") != "offline-locked-trees"
-                  or m.get("offline_source_trees") != inputs["offline_source_trees"]
-                  or m.get("compiler_lock") != inputs["android_clang"]):
-              raise SystemExit("Missing exact locked source provenance")
-          PYCODE
-      - name: Verify the kernel against the exact official ColorOS boot
+          nix develop --no-update-lock-file -c python3 scripts/coloros_cache.py record --built out/nix-coloros --source-commit "$SOURCE_COMMIT"
+      - name: Check hashes and provenance for the built or restored kernel
+        id: verified_input
         run: |
           set -euo pipefail
-          python3 -m pip install vmlinux-to-elf==1.3.6
-          python3 scripts/fetch_oneplus9pro_stock_boot.py --os coloros --output .work/twrp-stock/coloros/boot.img
-          python3 - <<'PY'
-          import json, pathlib, subprocess
-          fw = json.loads(pathlib.Path("devices/oneplus-9-pro.json").read_text())["firmware"]["coloros"]
-          qualified = pathlib.Path("out/qualified-coloros")
-          subprocess.run(["python3", "scripts/repack.py", "--device", "oneplus-9-pro", "--os", "coloros",
-              "--layout", "a/b", "--firmware", fw["build_id"], "--stock", ".work/twrp-stock/coloros/boot.img",
-              "--stock-sha256", fw["stock_boot_sha256"], "--built", "out/nix-coloros",
-              "--output", qualified], check=True)
-          report = json.loads((qualified / "build.json").read_text())["export_crc_check"]
-          if report.get("passed") is not True or report.get("matching") != 13797 or report.get("stock_exports") != 13797:
-              raise SystemExit("Expected all 13,797 official ColorOS export CRCs to match")
-          PY
+          nix develop --no-update-lock-file -c python3 scripts/coloros_cache.py check --built out/nix-coloros --source-commit "$SOURCE_COMMIT"
+      - name: Verify the kernel against the exact official ColorOS boot
+        id: qualification
+        run: |
+          set -euo pipefail
+          nix run --no-update-lock-file .#coloros-pipeline -- qualify \
+            --built out/nix-coloros --stock .work/twrp-stock/coloros/boot.img \
+            --output out/qualified-coloros --source-commit "$SOURCE_COMMIT"
+      - name: Cache only verified kernel files, never a boot image
+        if: steps.kernel_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: out/nix-coloros
+          key: ${{ steps.kernel_cache.outputs.cache-primary-key }}
       - name: Upload qualified kernel files for review (not a flashable image)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -89,25 +111,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Package the qualified ColorOS TWRP ZIP
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.package_twrp
+        if: github.event_name == 'workflow_dispatch' && inputs.package_twrp
         env:
           CI_RUN: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os, pathlib, subprocess
-          lock = json.loads(pathlib.Path("anykernel3.lock.json").read_text())
-          upstream = ".work/AnyKernel3"
-          subprocess.run(["git", "init", "--quiet", upstream], check=True)
-          subprocess.run(["git", "-C", upstream, "fetch", "--depth=1", lock["repository"], lock["commit"]], check=True)
-          subprocess.run(["git", "-C", upstream, "checkout", "--detach", lock["commit"]], check=True)
-          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-          subprocess.run(["python3", "scripts/package_twrp.py", "--built", "out/nix-coloros",
-              "--qualified", "out/qualified-coloros", "--os", "coloros", "--anykernel3", upstream,
-              "--output", "out/twrp-delivery", "--source-commit", head, "--ci-run", os.environ["CI_RUN"]], check=True)
-          PY
+          nix run --no-update-lock-file .#coloros-pipeline -- package \
+            --built out/nix-coloros --qualified out/qualified-coloros \
+            --output out/twrp-delivery --source-commit "$SOURCE_COMMIT" --run-id "$CI_RUN"
       - name: Upload the ColorOS TWRP ZIP and checksum
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.package_twrp
+        if: github.event_name == 'workflow_dispatch' && inputs.package_twrp
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: twrp-experimental-oneplus-9-pro-coloros-nix-${{ github.run_number }}
@@ -116,3 +129,16 @@ jobs:
             out/twrp-delivery/*.zip.sha256
           if-no-files-found: error
           retention-days: 14
+      - name: Report separate build, ABI, and device verification states
+        if: always()
+        env:
+          BUILD_STATUS: ${{ steps.verified_input.outcome }}
+          ABI_STATUS: ${{ steps.qualification.outcome }}
+        run: |
+          {
+            printf '### ColorOS verification for %s\n\n' "$SOURCE_COMMIT"
+            printf '| Check | Status |\n| --- | --- |\n'
+            printf '| Nix kernel files and provenance | %s |\n' "${BUILD_STATUS:-not run}"
+            printf '| Official stock boot and all 13,797 export CRCs | %s |\n' "${ABI_STATUS:-not run}"
+            printf '| Boot and original driver loading on hardware | Not tested |\n'
+          } >> "$GITHUB_STEP_SUMMARY"

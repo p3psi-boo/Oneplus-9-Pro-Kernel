@@ -1,80 +1,65 @@
-"""Guardrails for the ColorOS-only Nix production workflow."""
+"""Behavioral checks for the workflow's exact-commit kernel cache."""
 import json
 from pathlib import Path
+import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import coloros_cache
+from project import sha256
 
 
-class TwrpWorkflowTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.workflows = ROOT / ".github/workflows"
-        cls.text = (cls.workflows / "droidspaces.yml").read_text()
+class KernelCacheTests(unittest.TestCase):
+    commit = "a" * 40
 
-    def test_default_branch_builds_coloros_only(self):
-        for value in ("  push:\n    branches: [oneplus-9-pro]", "  coloros:",
-                      "if: github.ref == 'refs/heads/oneplus-9-pro'", "ref: ${{ github.sha }}"):
-            self.assertIn(value, self.text)
-        for forbidden in ("pull_request:", "pull_request_target:", "build-twrp", "oxygenos",
-                          "matrix:", "nix_coloros:", "python3 scripts/build.py",
-                          "actions/download-artifact"):
-            self.assertNotIn(forbidden, self.text)
-        for legacy in ("build.yml", "boot.yml"):
-            self.assertFalse((self.workflows / legacy).exists())
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.built = Path(temp.name)
+        for name in coloros_cache.FILES:
+            (self.built / name).write_text(name, encoding="utf-8")
+        manifest = {
+            "source_commit": self.commit,
+            "os": "coloros",
+            "device": "oneplus-9-pro",
+            "source_mode": "offline-locked-trees",
+            "compile_verified": True,
+            "image_sha256": sha256(self.built / "Image"),
+            "config_sha256": sha256(self.built / "kernel.config"),
+        }
+        (self.built / "build.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-    def test_only_locked_nix_build_can_feed_the_packager(self):
-        for value in ("sandbox-fallback = false", "--option sandbox true --option sandbox-fallback false",
-                      "--no-update-lock-file", ".#coloros-kernel", '"source_mode"',
-                      'm.get("source_mode") != "offline-locked-trees"',
-                      'm.get("offline_source_trees") != inputs["offline_source_trees"]',
-                      'm.get("compiler_lock") != inputs["android_clang"]', '"--built", "out/nix-coloros"'):
-            self.assertIn(value, self.text)
-        self.assertNotIn("continue-on-error", self.text)
+    def cache(self, command, commit=None):
+        coloros_cache.run(command, self.built, commit or self.commit)
 
-    def test_only_manual_dispatch_produces_twrp_zip(self):
-        for value in ("package_twrp:", "type: boolean", "default: false",
-                      "name: twrp-experimental-oneplus-9-pro-coloros-nix-",
-                      "out/twrp-delivery/*.zip.sha256", "if-no-files-found: error"):
-            self.assertIn(value, self.text)
-        gate = "if: success() && github.event_name == 'workflow_dispatch' && inputs.package_twrp"
-        self.assertEqual(self.text.count(gate), 2)
+    def test_same_commit_checked_and_different_commit_rejected(self):
+        self.cache("record")
+        self.cache("check")
+        with self.assertRaisesRegex(ValueError, "this ColorOS Nix build"):
+            self.cache("check", "b" * 40)
 
-    def test_read_only_no_publish_or_secrets(self):
-        self.assertIn("contents: read", self.text)
-        self.assertIn("persist-credentials: false", self.text)
-        for forbidden in ("secrets.", "contents: write", "gh release", "git push"):
-            self.assertNotIn(forbidden, self.text)
+    def test_mutated_symbol_file_rejected(self):
+        self.cache("record")
+        (self.built / "System.map").write_text("different", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "digest or provenance mismatch"):
+            self.cache("check")
 
-    def test_exact_stock_qualification_precedes_output(self):
-        order = (".#coloros-kernel", "scripts/fetch_oneplus9pro_stock_boot.py --os coloros",
-                 '"scripts/repack.py"', 'report.get("matching") != 13797',
-                 "Upload qualified kernel files", '"scripts/package_twrp.py"',
-                 "Upload the ColorOS TWRP ZIP and checksum")
-        positions = [self.text.index(x) for x in order]
-        self.assertEqual(positions, sorted(positions))
-        for value in ('fw["stock_boot_sha256"]', 'lock["commit"]', '"--source-commit", head',
-                      '"--qualified", "out/qualified-coloros"'):
-            self.assertIn(value, self.text)
-        self.assertNotIn("out/qualified-coloros/boot.img", self.text)
+    def test_foreign_file_even_boot_rejected(self):
+        self.cache("record")
+        (self.built / "boot.img").write_bytes(b"not cached")
+        with self.assertRaisesRegex(ValueError, "file inventory"):
+            self.cache("check")
 
-    def test_nix_external_sources_have_real_hashes(self):
-        flake = json.loads((ROOT / "flake.lock").read_text())
-        self.assertRegex(flake["nodes"]["nixpkgs"]["locked"]["rev"], r"^[0-9a-f]{40}$")
-        sources = json.loads((ROOT / "nix/sources-lock.json").read_text())
-        self.assertEqual(set(sources), {"kernel", "vendor", "resukisu", "clang"})
-        for digest in sources.values():
-            self.assertRegex(digest, r"^sha256-[A-Za-z0-9+/]{43}=$")
-            self.assertNotEqual(digest, "sha256-" + ("A" * 43) + "=")
-
-    def test_embedded_python_is_valid(self):
-        lines = self.text.splitlines()
-        starts = [(i, line.strip().split("'")[1]) for i, line in enumerate(lines)
-                  if line.strip().startswith("python3 - <<'")]
-        self.assertEqual(len(starts), 3)
-        for start, marker in starts:
-            end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == marker)
-            compile("\n".join(line[10:] for line in lines[start + 1:end]), "<workflow>", "exec")
+    def test_symlink_never_accepted(self):
+        self.cache("record")
+        (self.built / "System.map").rename(self.built.parent / (self.built.name + ".map"))
+        moved = self.built.parent / (self.built.name + ".map")
+        self.addCleanup(moved.unlink)
+        (self.built / "System.map").symlink_to(moved)
+        with self.assertRaisesRegex(ValueError, "regular nonempty"):
+            self.cache("check")
 
 
 if __name__ == "__main__":

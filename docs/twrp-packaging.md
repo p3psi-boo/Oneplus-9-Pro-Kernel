@@ -64,30 +64,13 @@ does not disable device AVB or guarantee an unlocked device will boot it.
 
 ## Reproduction
 
-Use the existing build and `scripts/repack.py` flow first. Obtain official
-AnyKernel3 and check out the exact commit in `anykernel3.lock.json` (not a moving
-branch). Then, separately for each OS:
-
-```sh
-python3 scripts/package_twrp.py \
-  --built /absolute/path/to/ci/coloros \
-  --qualified /absolute/path/to/repacked/coloros \
-  --os coloros --anykernel3 /absolute/path/to/AnyKernel3 \
-  --output /absolute/path/to/new-output \
-  --source-commit b89562fd27334bacdd050eb0ac2f5bee1abc2cbd \
-  --ci-run 44478812236
-python3 -m unittest discover -s tests -p 'test_twrp_packaging.py' -v
-```
-
-For OxygenOS replace all three `coloros` occurrences with `oxygenos`. Output
-files are never overwritten. ZIP entries are sorted with fixed timestamps,
-permissions and compression settings; reproduce with the same Python/zlib.
-The packager rechecks pinned upstream bytes, manifests, ABI checks and payload
-hashes, then validates all ZIP contents and emits a sidecar SHA-256. Checksums
-are corruption checks, not signatures. The supplied CI commit/run fields record
-the operator's provenance claim; they do not authenticate GitHub independently.
-Host shell mocks test refusal and write/readback control flow, not Android
-BusyBox or real block-device behavior. No device flashing was performed.
+Use the [Nix build and validation commands](nix-build.md#本地验证和打包) on a clean checkout
+to qualify and package the ColorOS kernel without Actions. ZIP entries are sorted
+with fixed timestamps, permissions and compression settings; reproduce with the
+same Nix toolchain and provenance values. The ZIP identifies the exact project
+commit separately from the AnyKernel3 commit. The sidecar SHA-256 detects
+corruption; it is not a signature. Host fixtures exercise packaging and installer
+refusal/write/readback logic, but not Android BusyBox or real block devices.
 
 ## GitHub Actions: generate the ColorOS ZIP
 
@@ -100,7 +83,7 @@ BusyBox or real block-device behavior. No device flashing was performed.
 The inner `*-twrp.zip` is the TWRP package. The adjacent `.zip.sha256`
 file checks that package. Do not flash the GitHub artifact wrapper.
 
-Nix compiles only ColorOS. Before upload, the workflow checks the result
+Nix compiles and packages only ColorOS. Before upload, the workflow checks the result
 against the registered stock boot. Without `package_twrp`, it uploads only
 the verified kernel review artifact. It publishes no GitHub Release.
 Artifacts expire after 14 days. Build and ABI checks do not verify device boot.
