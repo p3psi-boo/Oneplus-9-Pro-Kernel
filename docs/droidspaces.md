@@ -52,6 +52,12 @@ create the TUN interface, install IPv4/IPv6 routes with `cap.table`,
 check the inet nftables rules with an overlay configured, and pass traffic
 in both directions. Build/ABI checks do not replace this test.
 
+## TWRP installation ZIPs (experimental)
+
+See [the OnePlus 9 Pro TWRP packaging and installation notes](twrp-packaging.md).
+Use only the per-firmware package for the exact stock ROM and an untouched
+current-slot boot partition. Do not flash a raw CI artifact in recovery.
+
 ## Build and verify
 
 On Linux with the same dependencies as the existing repository builds:

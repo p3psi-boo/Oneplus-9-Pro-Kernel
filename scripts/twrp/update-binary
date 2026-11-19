@@ -1,0 +1,16 @@
+#!/sbin/sh
+# Restricted recovery entrypoint; NOT upstream's mount/module/backup installer.
+set -eu
+umask 077
+[ "$#" -eq 3 ] || exit 1
+case "$2" in ''|*[!0-9]*) exit 1 ;; esac
+[ -f "$3" ] || exit 1
+WORK=$(mktemp -d /tmp/ak3-guarded.XXXXXX) || exit 1
+trap 'rm -rf "$WORK"' EXIT HUP INT TERM
+unzip -o "$3" -d "$WORK" >/dev/null || exit 1
+chmod 755 "$WORK/tools/busybox"
+# The only shipped executable binary is the hash-pinned official AK3 BusyBox.
+"$WORK/tools/busybox" env -i \
+  PATH=/sbin:/system/bin:/vendor/bin \
+  AKHOME="$WORK" OUTFD="$2" \
+  "$WORK/tools/busybox" sh "$WORK/anykernel.sh"

@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/osm0sis/AnyKernel3.git",
+  "commit": "41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1",
+  "checked_at": "2026-11-19",
+  "files": {
+    "tools/ak3-core.sh": "0544478d92865e2f16aab00676de475af8bbbb0abecea738716f4aea3f484c9b",
+    "tools/busybox": "66436dc1e97d22886ed2d35bd69a9cb82bb0fdba4e4267c5184cee1d39a2f5f4",
+    "LICENSE": "df6f65da47d459fdf2a2ef0eadb34f37d838befc91352b64a84f35507bea95cd"
+  }
+}
