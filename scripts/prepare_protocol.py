@@ -12,6 +12,46 @@ def protocol_directory(profile):
     name = "oneplus-8" if profile["id"] == "oneplus-8-pro" else profile["id"]
     return ROOT / "compat/sm8250" / name
 
+def canonicalize_oneof_members(text, messages):
+    """Use stock descriptor tag order for anonymous unions in the SM8350 ABI."""
+    for message in messages:
+        fields = [field for field in message["fields"] if field["flags"] & 4]
+        if not fields:
+            continue
+        name = message["c_name"]
+        ordered = sorted(fields, key=lambda field: field["id"])
+        field_names = [field["name"].lower() for field in ordered]
+        if len(set(field_names)) != len(fields) or len({field["id"] for field in fields}) != len(fields):
+            raise ValueError("Duplicate oneof fields in stock reflection: " + name)
+        structure = re.compile(r"^struct[ \t]+" + re.escape(name)
+                               + r"[ \t]*\n\{\n(?P<body>.*?)^\};", re.M | re.S)
+        structures = list(structure.finditer(text))
+        if len(structures) != 1:
+            raise ValueError("Unexpected generated protobuf struct: " + name)
+        start, end = structures[0].span("body")
+        body = text[start:end]
+        union = re.compile(r"^(?P<indent>[ \t]+)union[ \t]*\{\n"
+                           r"(?P<members>.*?)^(?P=indent)\};[ \t]*$", re.M | re.S)
+        unions = list(union.finditer(body))
+        if len(unions) != 1:
+            raise ValueError("Unexpected generated protobuf oneof union: " + name)
+        first, last = unions[0].span("members")
+        declarations = {}
+        for line in body[first:last].splitlines(keepends=True):
+            member = re.fullmatch(r"[ \t]+[A-Za-z_][A-Za-z_0-9 \t*]*?"
+                                  r"\b([A-Za-z_][A-Za-z_0-9]*)[ \t]*;[ \t]*\n", line)
+            if not member or member[1] in declarations:
+                raise ValueError("Unexpected generated protobuf oneof member: " + name)
+            declarations[member[1]] = line
+        if set(declarations) != set(field_names):
+            raise ValueError("Generated protobuf oneof fields differ from stock reflection: " + name)
+        # protobuf-c 1.5 may sort members by name. The C layout is unchanged,
+        # but genksyms hashes declaration order as part of exported types.
+        text = (text[:start] + body[:first] + "".join(declarations[field] for field in field_names)
+                + body[last:] + text[end:])
+    return text
+
+
 def prepare(modules, profile):
     directory = protocol_directory(profile)
     schema = directory / "netlink_msg.proto"
@@ -29,6 +69,9 @@ def prepare(modules, profile):
         # Preserve type names as well as layout for genksyms.
         for message in expected["messages"]:
             text = re.sub(r"\bstruct\s+_" + re.escape(message["c_name"]) + r"\b", "struct " + message["c_name"], text)
+        cfi_safe = profile["platform"] == "sm8350"
+        if cfi_safe:
+            text = canonicalize_oneof_members(text, expected["messages"])
         # Match protoc-c 1.4 oneof sentinel identifiers used by stock genksyms.
         text = re.sub(r"(PROTOBUF_C__FORCE_ENUM_TO_BE_INT_SIZE\(NETLINK__PROTO__[A-Z_]+_DATA)\)", r"\1__CASE)", text)
         include = "#include <protobuf-c/protobuf-c.h>"
@@ -36,7 +79,6 @@ def prepare(modules, profile):
             raise ValueError("Unexpected protoc-c header format")
         header.write_text(text)
         generated = work / "netlink_msg.pb-c.c"
-        cfi_safe = profile["platform"] == "sm8350"
         if cfi_safe:
             source = generated.read_text()
             callbacks = re.findall(r"\(ProtobufCMessageInit\)\s+(netlink__proto__[a-z0-9_]+__init)", source)

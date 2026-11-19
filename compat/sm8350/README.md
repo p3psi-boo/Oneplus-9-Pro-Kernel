@@ -14,7 +14,10 @@ netlink_msg.proto reconstructs those declarations. The oneof names follow the
 existing public schema; ordinary declaration order follows the recorded memory
 offsets. scripts/prepare_protocol.py generates protobuf-c sources and appends
 compile-time size and offset checks against every recorded field. The build
-manifest records both input hashes.
+manifest records both input hashes. The generator output also retains stock
+oneof union declaration order by field tag; newer protobuf-c releases can
+reorder these members by name, which affects genksyms without changing their
+byte offsets. The exported CRC is always computed, not set by the build.
 
 This restores message declarations and serialization support. It does not
 reconstruct private DPI algorithms or handlers absent from the public source.

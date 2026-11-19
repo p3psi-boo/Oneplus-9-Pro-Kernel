@@ -45,6 +45,18 @@ class DroidspacesProfileTests(unittest.TestCase):
                         droidspaces.verify_config(cfg, stock)
                 self.assertEqual(sha256(stock), firmware["config_sha256"])
 
+    def test_protocol_crc_fails_closed_before_the_full_build(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = pathlib.Path(temp)
+            report = output / "net/oplus_modules/data_module/built-in.a.symversions"
+            report.parent.mkdir(parents=True)
+            report.write_text("__crc_register_netlink_request = 0x8ed24291;\n")
+            droidspaces.verify_protocol_crc(output)
+            for invalid in ("__crc_register_netlink_request = 0x862bd52e;\n", "", report.read_text() * 2):
+                report.write_text(invalid)
+                with self.assertRaisesRegex(ValueError, "CRC mismatch"):
+                    droidspaces.verify_protocol_crc(output)
+
     def test_rejects_other_models_and_kernel_drift(self):
         with self.assertRaisesRegex(ValueError, "not been reviewed"):
             droidspaces.require_device(device("oneplus-9"))

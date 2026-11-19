@@ -10,7 +10,9 @@ on:
       - 'scripts/build.py'
       - 'scripts/droidspaces.py'
       - 'scripts/repack.py'
+      - 'scripts/prepare_protocol.py'
       - 'tests/test_droidspaces.py'
+      - 'tests/test_prepare_protocol.py'
 permissions:
   contents: read
 jobs:
@@ -34,7 +36,9 @@ jobs:
               raise SystemExit("This workflow is restricted to OnePlus 9 Pro")
           PY
       - name: Check profile tooling
-        run: python3 -m unittest discover -s tests -p test_droidspaces.py -v
+        run: |
+          python3 -m unittest discover -s tests -p test_droidspaces.py -v
+          python3 -m unittest discover -s tests -p test_prepare_protocol.py -v
       - name: Install build dependencies
         run: |
           sudo apt-get update

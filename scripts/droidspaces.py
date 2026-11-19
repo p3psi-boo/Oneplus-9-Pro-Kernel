@@ -7,6 +7,7 @@ KERNEL = "9e38a9fabb4de096bf386b7be988b7f7c5e4c58e"
 UPSTREAM = "cdadb9eb5d0f86aacffff60776333e6f6b73a30a"
 PATCH = ROOT / "patches/droidspaces-sm8350-ipc-kabi.patch"
 CONFIG = ROOT / "configs/droidspaces-sm8350.config"
+STOCK_PROTOCOL_CRC = 0x8ED24291  # Observed in the stock Image; see compat/sm8350/README.md.
 PROTECTIONS = ("CONFIG_MODULES", "CONFIG_MODVERSIONS", "CONFIG_MODULE_SIG",
                "CONFIG_MODULE_SIG_FORCE", "CONFIG_CFI_CLANG", "CONFIG_CFI_CLANG_SHADOW",
                "CONFIG_CFI_PERMISSIVE", "CONFIG_SECURITY_SELINUX",
@@ -57,6 +58,15 @@ def require_device(data):
 def apply_patch(source):
     run("git", "apply", "--check", PATCH, cwd=source)
     run("git", "apply", PATCH, cwd=source)
+
+
+def verify_protocol_crc(output):
+    versions = output / "net/oplus_modules/data_module/built-in.a.symversions"
+    text = versions.read_text(encoding="utf-8")
+    matches = re.findall(r"^__crc_register_netlink_request = (0x[0-9a-fA-F]+);$", text, re.M)
+    if len(matches) != 1 or int(matches[0], 16) != STOCK_PROTOCOL_CRC:
+        observed = ", ".join(matches) or "missing"
+        raise ValueError(f"Stock register_netlink_request CRC mismatch: expected {STOCK_PROTOCOL_CRC:#x}, got {observed}")
 
 
 def profile():

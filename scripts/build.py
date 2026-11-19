@@ -289,6 +289,8 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
         if required not in final_config.splitlines():
             raise RuntimeError("Kconfig dropped required option: " + required)
     run(*options, "-j" + str(os.cpu_count() or 2), "KBUILD_SYMTYPES=1", "net/oplus_modules/data_module/", env=env)
+    if with_droidspaces:
+        droidspaces.verify_protocol_crc(output)
     if name == "oneplus-8t":
         run(*options, "-j" + str(os.cpu_count() or 2), "net/ipv4/route.o",
             "net/ipv6/route.o", "net/xfrm/xfrm_policy.o", env=env)
