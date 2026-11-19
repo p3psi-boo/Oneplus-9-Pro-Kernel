@@ -1,7 +1,13 @@
 name: Build OnePlus 9 Pro Droidspaces (experimental)
 on:
   workflow_dispatch:
+    inputs:
+      package_twrp:
+        description: Build exact-stock-only experimental TWRP ZIPs after strict ABI qualification
+        type: boolean
+        default: false
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches: [oneplus-9-pro]
     paths:
       - '.github/workflows/droidspaces.yml'
@@ -15,20 +21,39 @@ on:
       - 'scripts/prepare_protocol.py'
       - 'tests/test_droidspaces.py'
       - 'tests/test_prepare_protocol.py'
+      - 'scripts/package_twrp.py'
+      - 'scripts/fetch_oneplus9pro_stock_boot.py'
+      - 'scripts/twrp/**'
+      - 'anykernel3.lock.json'
+      - 'devices/oneplus-9-pro.json'
+      - 'docs/twrp-packaging.md'
+      - 'tests/test_twrp_packaging.py'
+      - 'tests/test_twrp_workflow.py'
+      - 'tests/test_fetch_oneplus9pro_stock_boot.py'
 permissions:
   contents: read
 jobs:
   compile:
+    # Label trigger is available on the draft PR without merging the workflow.
+    # Only a fresh explicit label event enables packaging; synchronize never does.
+    if: >-
+      github.event.action != 'labeled' ||
+      (github.event.label.name == 'build-twrp' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         rom: [coloros, oxygenos]
     env:
       ROM: ${{ matrix.rom }}
+      PACKAGE_TWRP: ${{ (github.event_name == 'workflow_dispatch' && inputs.package_twrp) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build-twrp' && github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Require the exact model selector
         run: |
           python3 - <<'PY'
@@ -41,6 +66,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_droidspaces.py -v
           python3 -m unittest discover -s tests -p test_prepare_protocol.py -v
+          python3 -m unittest discover -s tests -p 'test_twrp*.py' -v
+          python3 -m unittest discover -s tests -p 'test_fetch_oneplus9pro_stock_boot.py' -v
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -54,3 +81,41 @@ jobs:
           name: droidspaces-experimental-oneplus-9-pro-${{ env.ROM }}-${{ github.run_number }}
           path: out/droidspaces/oneplus-9-pro/${{ env.ROM }}/
           if-no-files-found: error
+
+      - name: Fetch exact official stock boot and qualify TWRP package
+        if: env.PACKAGE_TWRP == 'true'
+        env:
+          CI_RUN: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install vmlinux-to-elf==1.3.6
+          python3 scripts/fetch_oneplus9pro_stock_boot.py --os "$ROM" --output ".work/twrp-stock/$ROM/boot.img"
+          python3 - <<'PYCODE'
+          import json, os, pathlib, subprocess
+          rom = os.environ["ROM"]
+          fw = json.loads(pathlib.Path("devices/oneplus-9-pro.json").read_text())["firmware"][rom]
+          built = "out/droidspaces/oneplus-9-pro/" + rom
+          qualified = "out/twrp-qualified/" + rom
+          subprocess.run(["python3", "scripts/repack.py", "--device", "oneplus-9-pro", "--os", rom,
+              "--layout", "a/b", "--firmware", fw["build_id"], "--stock", ".work/twrp-stock/" + rom + "/boot.img",
+              "--stock-sha256", fw["stock_boot_sha256"], "--built", built, "--output", qualified], check=True)
+          lock = json.loads(pathlib.Path("anykernel3.lock.json").read_text())
+          upstream = ".work/AnyKernel3"
+          subprocess.run(["git", "init", upstream], check=True)
+          subprocess.run(["git", "-C", upstream, "fetch", "--depth=1", lock["repository"], lock["commit"]], check=True)
+          subprocess.run(["git", "-C", upstream, "checkout", "--detach", lock["commit"]], check=True)
+          commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          subprocess.run(["python3", "scripts/package_twrp.py", "--built", built, "--qualified", qualified,
+              "--os", rom, "--anykernel3", upstream, "--output", "out/twrp-delivery",
+              "--source-commit", commit, "--ci-run", os.environ["CI_RUN"]], check=True)
+          PYCODE
+      - name: Upload qualified experimental TWRP ZIP and checksum
+        if: env.PACKAGE_TWRP == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: twrp-experimental-oneplus-9-pro-${{ env.ROM }}-${{ github.run_number }}
+          path: |
+            out/twrp-delivery/*.zip
+            out/twrp-delivery/*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

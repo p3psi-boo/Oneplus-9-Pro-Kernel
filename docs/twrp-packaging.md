@@ -85,3 +85,61 @@ are corruption checks, not signatures. The supplied CI commit/run fields record
 the operator's provenance claim; they do not authenticate GitHub independently.
 Host shell mocks test refusal and write/readback control flow, not Android
 BusyBox or real block-device behavior. No device flashing was performed.
+
+## GitHub Actions: generate actual ZIPs
+
+`Build OnePlus 9 Pro Droidspaces (experimental)` now has an **opt-in packaging
+stage**, not only a kernel artifact. It builds both variants from the checked-out
+commit, downloads each exact official stock boot through
+`fetch_oneplus9pro_stock_boot.py`, verifies its registered SHA-256/size, performs
+strict repack/ABI qualification, and packages against pinned official AnyKernel3.
+There are no private download URLs, secrets, vendor binaries checked into Git,
+release publishing, merges, or device operations.
+
+### While this work remains on the draft PR
+
+GitHub does not reliably expose `workflow_dispatch` for a new workflow until it
+exists on the default branch. Use the existing `pull_request` event instead:
+
+1. A repository maintainer reviews the **current PR head** and workflow changes.
+2. On the same-repository PR targeting `oneplus-9-pro`, add label `build-twrp`.
+   If already present, remove it and re-add it. Creating the label alone does not
+   start a run. Adding it starts the two-ROM matrix for that head commit.
+3. Find the labeled-event run of the above workflow. On success, download
+   `twrp-experimental-oneplus-9-pro-coloros-<run number>` and the separate
+   `twrp-experimental-oneplus-9-pro-oxygenos-<run number>` artifacts.
+4. Extract the GitHub artifact wrapper. The **inner** `...-twrp.zip` is the
+   flashable-format package; its adjacent `.zip.sha256` checks that exact ZIP.
+   The artifact wrapper is not flashable. Inspect `build.json` inside the ZIP
+   for the exact source commit, run ID and qualification evidence.
+
+Only the fresh `labeled` event with the exact label and a same-repository head
+can enable PR packaging. Ordinary PR opens/updates continue compile-only even
+if the label remains present. Fork PRs cannot enable this label packaging path.
+A new commit needs review and another explicit remove/re-add label event.
+The workflow uses `pull_request`, **not** `pull_request_target`; permissions are
+read-only, checkout credentials are not persisted, and no secrets are passed.
+Repository Actions approval/settings can still block a run. The relevant changed
+paths must match the existing workflow path filter, as they do for this PR.
+
+### After dispatch becomes available
+
+In Actions, choose this workflow, **Run workflow**, the intended branch, and
+check `package_twrp`. Leaving it unchecked builds kernel-review artifacts only.
+An equivalent CLI invocation is:
+
+```sh
+gh workflow run droidspaces.yml --ref YOUR_REVIEWED_BRANCH -f package_twrp=true
+```
+
+Each ROM runs in parallel on its own runner. Budget roughly **45–120 minutes**
+plus queue time for a clean end-to-end build; the job has a 120-minute limit.
+This is a planning estimate, not a completed hosted packaging benchmark.
+Stock-host outages/range failures, hash mismatches, ABI mismatch or upstream
+changes fail closed, and that ROM produces no TWRP artifact. The independent ROM
+may still succeed; never substitute its ZIP. Kernel-only review artifacts may
+remain available even when packaging fails. Artifacts expire after 14 days.
+
+Workflow structure and packaging are host-tested; the newly added full hosted
+pipeline must run successfully before its end-to-end result is claimed. No run
+is started merely by documenting this workflow, and no release is published.
