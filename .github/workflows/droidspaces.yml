@@ -8,6 +8,7 @@ on:
       - 'configs/droidspaces-sm8350.config'
       - 'configs/resukisu.config'
       - 'patches/droidspaces-sm8350-ipc-kabi.patch'
+      - 'patches/ranet3-sm8350-nft-kabi.patch'
       - 'scripts/build.py'
       - 'scripts/droidspaces.py'
       - 'scripts/repack.py'

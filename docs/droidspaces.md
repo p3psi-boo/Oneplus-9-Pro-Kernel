@@ -3,7 +3,8 @@
 The optional build profile targets OnePlus 9 Pro (`lemonadep`), Android 14,
 and the SM8350 Linux 5.4.254 source commit already registered by this fork.
 ColorOS and OxygenOS are built separately from their hash-pinned stock configs.
-The default build and stock config files are unchanged.
+The registered stock config files are unchanged. Normal builds do not enable
+the Droidspaces networking or IPC additions.
 
 [Droidspaces' GKI configuration guide](https://github.com/ravindu644/Droidspaces-OSS/blob/cdadb9eb5d0f86aacffff60776333e6f6b73a30a/Documentation/Kernel-Configuration.md#gki-kernels-54-and-newer)
 requires relocating IPC-related fields into reserved Android ABI padding.
@@ -21,6 +22,35 @@ the registered stock config. It leaves the ABI-breaking CPU bandwidth and PID
 cgroup options disabled; the related Droidspaces limits are not supported by
 this profile. As with other privileged container runtimes, only run trusted
 container images.
+
+## ranet3 Linux mesh node (experimental)
+
+[The upstream platform guide](https://ranet3.com/docs/platforms/) requires Linux
+4.20 or later for strict rtnetlink routing queries. Its
+[Linux daemon guide](https://ranet3.com/docs/getting-started/) also needs TUN
+and `CAP_NET_ADMIN`. TUN, IPv4/IPv6 policy routing, and conntrack are already
+built in on both stock ROMs. This profile adds inet-family nftables, sets,
+conntrack matches and counters for ranet3's mesh and antispoof rules.
+Enabling nftables on this 5.4 tree would normally insert a field into
+`struct net`; a separate patch stores the field in nftables' existing
+private per-network-namespace allocation instead.
+
+`ranet3` handles [ESP and segment steering in userspace](https://ranet3.com/docs/segment-routing/).
+This profile does not enable additional kernel XFRM/IPsec or SRv6 options.
+It does not claim Linux exit-node/subnet-router support (`cap.egress`):
+the egress implementation uses conntrack timeout objects alongside inet NAT,
+and enabling timeout support changes the stock conntrack extension layout.
+Do not enable it without a separate layout, CRC and runtime audit.
+Native Android builds do not implement `cap.egress` or `cap.exit` regardless
+of kernel settings. For this profile the intended deployment is the **Linux**
+ARM64 daemon in Droidspaces, with `/dev/net/tun` and network administration
+access inside the intended namespace. Do not relax Android's SELinux policy
+to work around missing device access.
+
+Before claiming compatibility, test a two-node mesh on the matching phone:
+create the TUN interface, install IPv4/IPv6 routes with `cap.table`,
+check the inet nftables rules with an overlay configured, and pass traffic
+in both directions. Build/ABI checks do not replace this test.
 
 ## Build and verify
 

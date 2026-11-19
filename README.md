@@ -44,6 +44,8 @@ S3908 息屏单击手势修复已收录于 v0.2.0，范围与验证说明见 [�
 
 需要 Linux 容器时可单独构建 Droidspaces 配置，默认构建不会启用该配置。为保留原厂模块版本检查，普通构建和 Droidspaces 构建均禁用强制加载内核模块。请先阅读 [构建、原厂 ABI 对照及实测范围](docs/droidspaces.md)。
 
+此实验配置也加入了 [ranet3 Linux 节点所需的 nftables 支持](docs/droidspaces.md#ranet3-linux-mesh-node-experimental)，不包含出口节点支持。
+
 ## 分支和构建
 
 `main` 维护共用脚本与所有机型配置。机型分支的 `device.json` 选择构建目标；GitHub Actions 拒绝分支与机型不一致的请求。8 系列 / 9R 使用 4.19.157，9 / 9 Pro / 9RT 使用 5.4.254。上游源码、ReSukiSU、补丁与工具链均记录版本或校验和。

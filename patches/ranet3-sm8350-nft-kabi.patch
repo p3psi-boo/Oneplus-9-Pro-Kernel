@@ -1,0 +1,104 @@
+diff --git a/include/net/net_namespace.h b/include/net/net_namespace.h
+index 167e390..ad20936 100644
+--- a/include/net/net_namespace.h
++++ b/include/net/net_namespace.h
+@@ -28,7 +28,6 @@
+ #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
+ #include <net/netns/conntrack.h>
+ #endif
+-#include <net/netns/nftables.h>
+ #include <net/netns/xfrm.h>
+ #include <net/netns/mpls.h>
+ #include <net/netns/can.h>
+@@ -138,9 +137,6 @@ struct net {
+ #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
+ 	struct netns_ct		ct;
+ #endif
+-#if defined(CONFIG_NF_TABLES) || defined(CONFIG_NF_TABLES_MODULE)
+-	struct netns_nftables	nft;
+-#endif
+ #if IS_ENABLED(CONFIG_NF_DEFRAG_IPV6)
+ 	struct netns_nf_frag	nf_frag;
+ 	struct ctl_table_header *nf_frag_frags_hdr;
+diff --git a/include/net/netfilter/nf_tables.h b/include/net/netfilter/nf_tables.h
+index a2d1ec4..9d309dd 100644
+--- a/include/net/netfilter/nf_tables.h
++++ b/include/net/netfilter/nf_tables.h
+@@ -1273,6 +1273,8 @@ void nft_trace_notify(struct nft_traceinfo *info);
+ 
+ #if IS_ENABLED(CONFIG_NF_TABLES)
+ 
++u8 nft_gencursor(const struct net *net);
++
+ /*
+  * The gencursor defines two generations, the currently active and the
+  * next one. Objects contain a bitmask of 2 bits specifying the generations
+@@ -1287,7 +1289,7 @@ void nft_trace_notify(struct nft_traceinfo *info);
+  */
+ static inline unsigned int nft_gencursor_next(const struct net *net)
+ {
+-	return net->nft.gencursor + 1 == 1 ? 1 : 0;
++	return nft_gencursor(net) ^ 1;
+ }
+ 
+ static inline u8 nft_genmask_next(const struct net *net)
+@@ -1297,8 +1299,7 @@ static inline u8 nft_genmask_next(const struct net *net)
+ 
+ static inline u8 nft_genmask_cur(const struct net *net)
+ {
+-	/* Use READ_ONCE() to prevent refetching the value for atomicity */
+-	return 1 << READ_ONCE(net->nft.gencursor);
++	return 1 << nft_gencursor(net);
+ }
+ 
+ #define NFT_GENMASK_ANY		((1 << 0) | (1 << 1))
+@@ -1507,6 +1508,7 @@ struct nftables_pernet {
+ 	struct mutex		commit_mutex;
+ 	unsigned int		base_seq;
+ 	u8			validate_state;
++	u8			gencursor;
+ };
+ 
+ #endif /* _NET_NF_TABLES_H */
+diff --git a/net/netfilter/nf_tables_api.c b/net/netfilter/nf_tables_api.c
+index 78b12d5..3d5c3ea 100644
+--- a/net/netfilter/nf_tables_api.c
++++ b/net/netfilter/nf_tables_api.c
+@@ -27,6 +27,15 @@
+ 
+ unsigned int nf_tables_net_id __read_mostly;
+ 
++/* Keep optional nftables state out of the vendor-facing struct net. */
++u8 nft_gencursor(const struct net *net)
++{
++	const struct nftables_pernet *nft_net = net_generic(net, nf_tables_net_id);
++
++	return READ_ONCE(nft_net->gencursor);
++}
++EXPORT_SYMBOL_GPL(nft_gencursor);
++
+ static LIST_HEAD(nf_tables_expressions);
+ static LIST_HEAD(nf_tables_objects);
+ static LIST_HEAD(nf_tables_flowtables);
+@@ -7002,7 +7011,7 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
+ 		;
+ 
+ 	/* step 3. Start new generation, rules_gen_X now in use. */
+-	net->nft.gencursor = nft_gencursor_next(net);
++	WRITE_ONCE(nft_net->gencursor, nft_gencursor_next(net));
+ 
+ 	list_for_each_entry_safe(trans, next, &nft_net->commit_list, list) {
+ 		switch (trans->msg_type) {
+diff --git a/net/netfilter/nf_tables_core.c b/net/netfilter/nf_tables_core.c
+index ceb0ef4..5b8b69b 100644
+--- a/net/netfilter/nf_tables_core.c
++++ b/net/netfilter/nf_tables_core.c
+@@ -156,7 +156,7 @@ nft_do_chain(struct nft_pktinfo *pkt, void *priv)
+ 	struct nft_regs regs = {};
+ 	unsigned int stackptr = 0;
+ 	struct nft_jumpstack jumpstack[NFT_JUMP_STACK_SIZE];
+-	bool genbit = READ_ONCE(net->nft.gencursor);
++	bool genbit = nft_gencursor(net);
+ 	struct nft_traceinfo info;
+ 
+ 	info.trace = false;

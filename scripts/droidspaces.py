@@ -6,8 +6,11 @@ DEVICE = "oneplus-9-pro"
 KERNEL = "9e38a9fabb4de096bf386b7be988b7f7c5e4c58e"
 UPSTREAM = "cdadb9eb5d0f86aacffff60776333e6f6b73a30a"
 PATCH = ROOT / "patches/droidspaces-sm8350-ipc-kabi.patch"
+NFT_PATCH = ROOT / "patches/ranet3-sm8350-nft-kabi.patch"
 CONFIG = ROOT / "configs/droidspaces-sm8350.config"
 STOCK_PROTOCOL_CRC = 0x8ED24291  # Observed in the stock Image; see compat/sm8350/README.md.
+RANET3_BASE = ("CONFIG_TUN", "CONFIG_IP_MULTIPLE_TABLES", "CONFIG_IPV6",
+               "CONFIG_IPV6_MULTIPLE_TABLES", "CONFIG_NF_CONNTRACK")
 PROTECTIONS = ("CONFIG_MODULES", "CONFIG_MODVERSIONS", "CONFIG_MODULE_SIG",
                "CONFIG_MODULE_SIG_FORCE", "CONFIG_CFI_CLANG", "CONFIG_CFI_CLANG_SHADOW",
                "CONFIG_CFI_PERMISSIVE", "CONFIG_SECURITY_SELINUX",
@@ -41,6 +44,7 @@ def verify_config(config, stock):
     actual = values(config.read_text(encoding="utf-8"))
     expected = values(CONFIG.read_text(encoding="utf-8"))
     baseline = values(stock.read_text(encoding="utf-8"))
+    expected.update((key, "y") for key in RANET3_BASE)
     expected.update((key, baseline.get(key, "n")) for key in PROTECTIONS)
     mismatches = [f"{key}={wanted} (actual {actual.get(key, 'n')})"
                   for key, wanted in expected.items() if actual.get(key, "n") != wanted]
@@ -56,8 +60,8 @@ def require_device(data):
 
 
 def apply_patch(source):
-    run("git", "apply", "--check", PATCH, cwd=source)
-    run("git", "apply", PATCH, cwd=source)
+    run("git", "apply", "--check", PATCH, NFT_PATCH, cwd=source)
+    run("git", "apply", PATCH, NFT_PATCH, cwd=source)
 
 
 def verify_protocol_crc(output):
@@ -71,4 +75,5 @@ def verify_protocol_crc(output):
 
 def profile():
     return {"upstream_commit": UPSTREAM, "patch_sha256": sha256(PATCH),
+            "nft_kabi_patch_sha256": sha256(NFT_PATCH),
             "config_fragment_sha256": sha256(CONFIG)}

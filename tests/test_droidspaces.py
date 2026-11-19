@@ -45,6 +45,22 @@ class DroidspacesProfileTests(unittest.TestCase):
                         droidspaces.verify_config(cfg, stock)
                 self.assertEqual(sha256(stock), firmware["config_sha256"])
 
+    def test_ranet3_requires_stock_tun_policy_routing_and_built_in_nftables(self):
+        for firmware in device("oneplus-9-pro")["firmware"].values():
+            stock = ROOT / firmware["config"]
+            with self.subTest(stock=stock.name), tempfile.TemporaryDirectory() as temp:
+                cfg = pathlib.Path(temp) / ".config"
+                cfg.write_bytes(stock.read_bytes())
+                droidspaces.merge_config(cfg)
+                droidspaces.verify_config(cfg, stock)
+                original = cfg.read_text()
+                for name in (*droidspaces.RANET3_BASE, "CONFIG_NF_TABLES",
+                             "CONFIG_NF_TABLES_SET", "CONFIG_NF_TABLES_INET",
+                             "CONFIG_NFT_CT", "CONFIG_NFT_COUNTER"):
+                    cfg.write_text(original.replace(f"{name}=y", f"# {name} is not set"))
+                    with self.assertRaisesRegex(ValueError, name):
+                        droidspaces.verify_config(cfg, stock)
+
     def test_protocol_crc_fails_closed_before_the_full_build(self):
         with tempfile.TemporaryDirectory() as temp:
             output = pathlib.Path(temp)
