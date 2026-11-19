@@ -1,0 +1,50 @@
+name: Build OnePlus 9 Pro Droidspaces (experimental)
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [oneplus-9-pro]
+    paths:
+      - '.github/workflows/droidspaces.yml'
+      - 'configs/droidspaces-sm8350.config'
+      - 'patches/droidspaces-sm8350-ipc-kabi.patch'
+      - 'scripts/build.py'
+      - 'scripts/droidspaces.py'
+      - 'scripts/repack.py'
+      - 'tests/test_droidspaces.py'
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        rom: [coloros, oxygenos]
+    env:
+      ROM: ${{ matrix.rom }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Require the exact model selector
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          if json.loads(Path("device.json").read_text()) != {"device": "oneplus-9-pro"}:
+              raise SystemExit("This workflow is restricted to OnePlus 9 Pro")
+          PY
+      - name: Check profile tooling
+        run: python3 -m unittest discover -s tests -p test_droidspaces.py -v
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-14 llvm-14 lld-14 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi build-essential bc bison flex libssl-dev libelf-dev libtinfo5 protobuf-c-compiler libprotobuf-c-dev dwarves python3
+          echo "/usr/lib/llvm-14/bin" >> "$GITHUB_PATH"
+      - name: Compile the pinned kernel and check config
+        run: python3 scripts/build.py --device oneplus-9-pro --os "$ROM" --droidspaces
+      - name: Upload kernel for ABI review (not a flashable image)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: droidspaces-experimental-oneplus-9-pro-${{ env.ROM }}-${{ github.run_number }}
+          path: out/droidspaces/oneplus-9-pro/${{ env.ROM }}/
+          if-no-files-found: error

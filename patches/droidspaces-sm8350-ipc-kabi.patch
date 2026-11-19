@@ -1,0 +1,59 @@
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 4aa50f40c..9f632f583 100755
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1143,10 +1143,6 @@ struct task_struct {
+ 
+ 	struct nameidata		*nameidata;
+ 
+-#ifdef CONFIG_SYSVIPC
+-	struct sysv_sem			sysvsem;
+-	struct sysv_shm			sysvshm;
+-#endif
+ #ifdef CONFIG_DETECT_HUNG_TASK
+ 	/* hung task detection */
+ 	unsigned long			last_switch_count;
+@@ -1608,9 +1604,15 @@ struct task_struct {
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
+ 	ANDROID_KABI_RESERVE(5);
++#ifdef CONFIG_SYSVIPC
++	ANDROID_KABI_USE(6, struct sysv_sem sysvsem);
++	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8),
++			      struct sysv_shm sysvshm);
++#else
+ 	ANDROID_KABI_RESERVE(6);
+ 	ANDROID_KABI_RESERVE(7);
+ 	ANDROID_KABI_RESERVE(8);
++#endif
+ #ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+ 	int abnormal_flag;
+ #endif
+diff --git a/include/linux/sched/user.h b/include/linux/sched/user.h
+index 573b448e0..f4a20d670 100644
+--- a/include/linux/sched/user.h
++++ b/include/linux/sched/user.h
+@@ -20,10 +20,6 @@ struct user_struct {
+ #endif
+ #ifdef CONFIG_EPOLL
+ 	atomic_long_t epoll_watches; /* The number of file descriptors currently watched */
+-#endif
+-#ifdef CONFIG_POSIX_MQUEUE
+-	/* protected by mq_lock	*/
+-	unsigned long mq_bytes;	/* How many bytes can be allocated to mqueue? */
+ #endif
+ 	unsigned long locked_shm; /* How many pages of mlocked shm ? */
+ 	unsigned long unix_inflight;	/* How many files in flight in unix sockets */
+@@ -41,7 +37,12 @@ struct user_struct {
+ 	/* Miscellaneous per-user rate limit */
+ 	struct ratelimit_state ratelimit;
+ 
++#ifdef CONFIG_POSIX_MQUEUE
++	/* Bytes allocated to mqueue, protected by mq_lock. */
++	ANDROID_KABI_USE(1, unsigned long mq_bytes);
++#else
+ 	ANDROID_KABI_RESERVE(1);
++#endif
+ 	ANDROID_KABI_RESERVE(2);
+ };
+ 
