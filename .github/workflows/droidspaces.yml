@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       package_twrp:
-        description: Build exact-stock-only experimental TWRP ZIPs after strict ABI qualification
+        description: Build the ColorOS TWRP ZIP after stock boot and ABI verification
         type: boolean
         default: false
   pull_request:
@@ -48,7 +48,7 @@ jobs:
         rom: [coloros, oxygenos]
     env:
       ROM: ${{ matrix.rom }}
-      PACKAGE_TWRP: ${{ (github.event_name == 'workflow_dispatch' && inputs.package_twrp) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build-twrp' && github.event.pull_request.head.repo.full_name == github.repository) }}
+      PACKAGE_TWRP: ${{ matrix.rom == 'coloros' && ((github.event_name == 'workflow_dispatch' && inputs.package_twrp) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build-twrp' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -113,7 +113,7 @@ jobs:
         if: env.PACKAGE_TWRP == 'true'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: twrp-experimental-oneplus-9-pro-${{ env.ROM }}-${{ github.run_number }}
+          name: twrp-experimental-oneplus-9-pro-coloros-${{ github.run_number }}
           path: |
             out/twrp-delivery/*.zip
             out/twrp-delivery/*.zip.sha256

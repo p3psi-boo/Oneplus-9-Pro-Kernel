@@ -1,94 +1,23 @@
-# ReSukiSU-OnePlus-Legacy
+# OnePlus 9 Pro Kernel
 
-下载：[v0.3.0 实验版 Release](https://github.com/daxiaamu/ReSukiSU-OnePlus-Legacy/releases/tag/v0.3.0)，包含七款机型的 14 个系统包、官方管理器 APK 和 SHA-256 校验表。
+本项目为一加 9 Pro（`lemonadep`）构建实验内核。内核基于一加公开的 Linux 5.4.254 源码。内核集成 ReSukiSU，用于管理 Root 权限。
 
-为一加 8、8 Pro、8T、9R、9、9 Pro、9RT 集成 ReSukiSU，产物为 **boot.img**。项目面向 non-GKI / 早期 GKI 1.0 平台，使用各机型官方源码和对应末版系统的原厂 boot，不能套用通用 GKI 2.0 镜像。
+## 特性
 
-**v0.3.0 的 14 份镜像均由本次 GitHub Actions 构建，已完成静态兼容检查和封装复查，尚未真机验证。** 本版更新至上游提交 `39faf94a2d4a40d48093398bafcde649916edbc1`，保留 `daxiaamu` 后缀、S3908 单击手势修复和原厂模块签名信任。ColorOS 为主，OxygenOS 为辅，请严格匹配下表的完整系统版本。
+- **Droidspaces**：实验配置支持在手机上运行 Linux 容器。
+- **ranet3**：实验配置支持在 Linux 容器中运行普通节点。不支持出口节点。
+- **原厂驱动**：构建保留原厂模块的签名和版本检查配置。打包前核对原厂导出符号及其 CRC。
 
-ReSukiSU 上游已迁移至 [Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)，本版版本标识为 BakaSU v4.2.0-rc3（35237）。随包管理器来自同一提交的官方 Actions，包名仍为 `com.resukisu.resukisu`。继续使用 Manual Hook，未集成 SUSFS。
+## 适用范围
 
-9R ColorOS 的临时启动实测属于旧版 [v0.1.0-r2](https://github.com/daxiaamu/ReSukiSU-OnePlus-Legacy/releases/tag/v0.1.0-r2)，不能作为本版已验证的依据。
+GitHub Actions 只为 ColorOS `LE2120_14.0.0.1901(CN01)` 生成 TWRP 安装包。OxygenOS 仍参加编译检查，不生成 TWRP 安装包。
 
-| 机型 | 独立分支 | ColorOS | OxygenOS |
-| --- | --- | --- | --- |
-| 一加 8 | [oneplus-8](../../tree/oneplus-8) | IN2010_13.1.0.190(CN01) | IN2013_13.1.0.593(EX01) |
-| 一加 8 Pro | [oneplus-8-pro](../../tree/oneplus-8-pro) | IN2020_13.1.0.190(CN01) | IN2023_13.1.0.591(EX01) |
-| 一加 8T | [oneplus-8t](../../tree/oneplus-8t) | KB2000_14.0.0.602(CN01) | KB2001_14.0.0.1311(EX01) |
-| 一加 9R | [oneplus-9r](../../tree/oneplus-9r) | LE2100_14.0.0.605(CN01) | LE2101_14.0.0.2401(EX01) |
-| 一加 9 | [oneplus-9](../../tree/oneplus-9) | LE2110_14.0.0.1901(CN01) | LE2111_14.0.0.1902(EX01) |
-| 一加 9 Pro | [oneplus-9-pro](../../tree/oneplus-9-pro) | LE2120_14.0.0.1901(CN01) | LE2121_14.0.0.1902(EX01) |
-| 一加 9RT | [oneplus-9rt](../../tree/oneplus-9rt) | MT2110_14.0.0.2701(CN01) | MT2111_14.0.0.2702(EX01) |
+**注意：** 刷入前必须备份原厂 `boot.img`。安装包要求解锁引导程序。当前槽的引导镜像必须保持原厂状态。真机启动未验证。
 
-**9R 的 ColorOS 是 A-only，OxygenOS 是 A/B。** 两者在 `oneplus-9r` 分支内分别配置、分别封装；ColorOS 从 ZIP 直接提取 boot.img，OxygenOS 从 payload 提取。其余本批次固件均为 A/B。
+## 获取安装包
 
-[Android 开心版软件下载](https://pan.quark.cn/s/14e8a6044f77)
+在 [GitHub Actions](https://github.com/p3psi-boo/Oneplus-9-Pro-Kernel/actions/workflows/droidspaces.yml) 运行构建时勾选 `package_twrp`。运行成功后，在产物中下载内层 `*-twrp.zip` 和对应的 SHA-256 校验文件。
 
-S3908 息屏单击手势修复已收录于 v0.2.0，范围与验证说明见 [触控手势排查](docs/touch-gestures.md)。
-
-9RT 已包含在 v0.2.0，适配细节见 [9RT 说明](docs/oneplus-9rt.md)。
-
-## 成品与验证范围
-
-每个成品目录包含 `boot.img`、`build.json`、`SHA256SUMS`；另有按机型和完整版本命名的 ZIP。镜像保存在本地 `out/`，不写入 Git 历史。校验值与构建记录见 [成品记录](docs/artifacts.json)。
-
-- 9 / 9 Pro：13,797 个原厂内核导出接口名称与 CRC 全部匹配，保留原厂 CFI 配置，验证协议初始化回调的 CFI 签名。
-- 9RT：13,842 个原厂内核导出接口名称与 CRC 全部匹配，保留原厂 CFI 配置。
-- 8 / 8 Pro / 8T / 9R：核对各系统原厂 vendor、odm 的全部 41 个驱动模块，通过依赖 CRC、内核 release 和 PKCS#7 签名检查；保留强制签名校验。证书根因与修复见 [模块签名说明](docs/module-signing.md)，旧版校验值见 [撤回记录](docs/withdrawn-artifacts.json)。
-- SM8250 保留两项公开源码内建触屏私有回调的结构差异。原厂驱动模块不引用这两项接口；其他原厂导出接口均匹配，没有缺失导出。原始差异报告保留在成品中，详见 [模块兼容性说明](docs/module-compatibility.md)。
-- 每份镜像仅替换内核，重新解包核对原厂 ramdisk、DTB 等其他组件及 header，检查镜像大小；不安装 Magisk，不执行刷机。
-
-上述检查不等于真机验证。开机、解密、触控、相机、指纹、无线网络、休眠及 Root 授权仍需要对应设备实测。公开源码与原厂内核可能存在未公开功能差异。
-
-## 一加 9 Pro：Droidspaces（实验性）
-
-需要 Linux 容器时可单独构建 Droidspaces 配置，默认构建不会启用该配置。为保留原厂模块版本检查，普通构建和 Droidspaces 构建均禁用强制加载内核模块。请先阅读 [构建、原厂 ABI 对照及实测范围](docs/droidspaces.md)。
-
-此实验配置也加入了 [ranet3 Linux 节点所需的 nftables 支持](docs/droidspaces.md#ranet3-linux-mesh-node-experimental)，不包含出口节点支持。
-
-## 分支和构建
-
-`main` 维护共用脚本与所有机型配置。机型分支的 `device.json` 选择构建目标；GitHub Actions 拒绝分支与机型不一致的请求。8 系列 / 9R 使用 4.19.157，9 / 9 Pro / 9RT 使用 5.4.254。上游源码、ReSukiSU、补丁与工具链均记录版本或校验和。
-
-在 GitHub 的 **Actions → Build latest ReSukiSU → Run workflow** 中，选择对应机型分支和 ColorOS / OxygenOS，即可手动构建。每次构建都使用 **ReSukiSU 官方默认分支的最新提交**：先解析 HEAD 的完整 SHA，再按该 SHA 检出编译。若解析失败，构建会报错。
-
-新构建的内核版本在原厂版本字符串后追加 `-daxiaamu`，例如 `4.19.157-perf+-daxiaamu`。Actions 摘要和 `build.json` 会记录完整版本；原厂模块的 CRC 和签名检查仍然保留。
-
-工作流摘要和产物 `build.json` 记录实际提交。最新源码构建需重新验证兼容性，不继承已发布镜像的真机验证结果。编译产物包含 `Image` 与构建记录；生成 `boot.img` 仍需下述原厂 boot 封装步骤。
-
-本地 Linux 构建同样使用最新 ReSukiSU：
-
-```sh
-python3 scripts/build.py --device oneplus-9r --os coloros
-```
-
-同机型两套系统即使配置和导出 CRC 相同，也必须核对模块签名证书。SM8250 的 ColorOS、OxygenOS 证书不同，本版继续分别编译，并使用各自的原厂 boot 封装。
-
-原厂 ZIP 可从本地或只读共享读取，输出写入本项目：
-
-```sh
-python3 scripts/extract_stock.py --device oneplus-9r --os coloros \
-  --rom /path/to/official.zip
-# payload 格式另加 --dumper /path/to/payload_dumper
-```
-
-SM8250 在封装前还需提取对应 ROM 的 vendor、odm，按 [模块检查流程](docs/module-compatibility.md) 生成清单。完整导出表不匹配且没有原厂模块证据时，封装会拒绝继续。
-
-```sh
-python3 scripts/repack.py --device oneplus-9r --os coloros --layout a-only \
-  --firmware 'LE2100_14.0.0.605(CN01)' \
-  --stock .work/stock/oneplus-9r/coloros/boot.img \
-  --stock-sha256 ACTUAL_64_CHARACTER_SHA256
-```
-
-OxygenOS 9R 使用 `--os oxygenos --layout a/b` 及其独立固件信息。原厂 SHA-256 和版本保存在 `devices/*.json`。完成全部机型封装后，运行 `python3 scripts/package_artifacts.py` 生成 ZIP、总校验表和本地成品索引。
-
-## 来源与许可
-
-- [OnePlus SM8250 官方内核](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8250)
-- [OnePlus SM8350 官方内核](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8350)
-- [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
-- [magiskboot](https://github.com/topjohnwu/Magisk)
-- [erofs-utils](https://git.kernel.org/pub/scm/linux/kernel/git/xiang/erofs-utils.git/)
-
-项目脚本和内核补丁使用 GPL-2.0-only。上游代码及工具遵循各自许可证；分发内核二进制时应同时提供对应源码提交、补丁、配置和构建说明。
+- [TWRP 安装与恢复说明](docs/twrp-packaging.md)
+- [Droidspaces 与 ranet3 说明](docs/droidspaces.md)
+- [许可证](LICENSE)

@@ -17,6 +17,15 @@ class TwrpWorkflowTests(unittest.TestCase):
         self.assertEqual(self.text.count("if: env.PACKAGE_TWRP == 'true'"), 2)
         self.assertNotIn('pull_request_target:', self.text)
 
+    def test_only_coloros_can_package_even_when_opted_in(self):
+        gate = next(line.strip() for line in self.text.splitlines()
+                    if line.strip().startswith("PACKAGE_TWRP:"))
+        self.assertIn("matrix.rom == 'coloros' && ((", gate)
+        self.assertEqual(self.text.count("if: env.PACKAGE_TWRP == 'true'"), 2)
+        self.assertIn("name: twrp-experimental-oneplus-9-pro-coloros-", self.text)
+        self.assertNotIn("twrp-experimental-oneplus-9-pro-oxygenos-", self.text)
+        self.assertIn("rom: [coloros, oxygenos]", self.text)
+
     def test_read_only_no_publish_or_secrets(self):
         self.assertIn('contents: read', self.text)
         self.assertIn('persist-credentials: false', self.text)
