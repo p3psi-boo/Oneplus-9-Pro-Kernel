@@ -16,7 +16,7 @@ GitHub Actions 用 Nix 构建内核。它只为 ColorOS `LE2120_14.0.0.1901(CN01
 
 ## 获取安装包
 
-在 [GitHub Actions](https://github.com/p3psi-boo/Oneplus-9-Pro-Kernel/actions/workflows/droidspaces.yml) 选择默认分支 `oneplus-9-pro`。勾选 `package_twrp`。运行成功后，在产物中下载内层 `*-twrp.zip` 和对应的 SHA-256 校验文件。
+推送构建相关改动到 `oneplus-9-pro` 后，[ColorOS TWRP](https://github.com/p3psi-boo/Oneplus-9-Pro-Kernel/actions/workflows/droidspaces.yml) 会自动编译、校验并打包。也可以在 Actions 手动运行，不需要勾选选项。运行成功后，下载产物并解压，只刷入内层的 `*-twrp.zip`。
 
 - [TWRP 安装与恢复说明](docs/twrp-packaging.md)
 - [Droidspaces 与 ranet3 说明](docs/droidspaces.md)

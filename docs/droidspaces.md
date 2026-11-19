@@ -67,9 +67,9 @@ python3 scripts/build.py --device oneplus-9-pro --os coloros --droidspaces
 python3 scripts/build.py --device oneplus-9-pro --os oxygenos --droidspaces
 ```
 
-The **Build OnePlus 9 Pro Droidspaces (experimental)** Actions workflow builds
-both variants without packaging a boot image. Kernel-only outputs, including
-the final config, System.map and provenance, are under
+The **ColorOS TWRP** Actions workflow uses Nix and packages only ColorOS,
+after exact stock ABI checks. See [Nix build and validation](nix-build.md).
+The local commands above produce kernel-only outputs under
 `out/droidspaces/oneplus-9-pro/<os>/`.
 
 Before considering a boot image, run the existing verified repacker against

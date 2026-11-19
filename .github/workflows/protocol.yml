@@ -1,4 +1,4 @@
-name: Stock protocol and CFI checks
+name: Protocol Checks
 on:
   workflow_dispatch:
 permissions:

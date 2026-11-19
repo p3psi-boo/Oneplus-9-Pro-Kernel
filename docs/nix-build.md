@@ -35,12 +35,7 @@ nix build --no-update-lock-file --option sandbox true --option sandbox-fallback 
 
 ## 在 GitHub Actions 验证和打包
 
-1. 打开「Build OnePlus 9 Pro ColorOS with Nix」。
-2. 选择 `oneplus-9-pro`。
-3. 勾选 `package_twrp`，运行工作流。
-
-推送也会触发 Nix 编译。推送触发的运行不生成 TWRP 安装包。
-工作流只编译 ColorOS，不用常规构建作回退。
+推送构建相关改动到 `oneplus-9-pro` 会触发「ColorOS TWRP」。也可以在 Actions 中选择该分支并手动运行。两种方式都会在校验通过后生成 TWRP 安装包。工作流只构建 ColorOS，没有常规构建回退。
 
 工作流核对内核配置、版本和签名检查设置。
 工作流核对官方 ColorOS 内核的 13,797 个导出符号及其 CRC。
@@ -49,7 +44,7 @@ nix build --no-update-lock-file --option sandbox true --option sandbox-fallback 
 不缓存原厂 boot、重打包的 boot 或安装包。再次运行相同提交时，先核对提交 SHA
 和每个文件的摘要，再复用内核并重新校验。没有缓存时才重新编译。
 校验通过后，工作流上传 `nix-coloros-verified-kernel-*` 产物。
-勾选 `package_twrp` 时，工作流另行上传 `twrp-experimental-oneplus-9-pro-coloros-nix-*`。
+打包成功后，工作流另行上传 `twrp-experimental-oneplus-9-pro-coloros-nix-*`。
 
 ## 本地验证和打包
 

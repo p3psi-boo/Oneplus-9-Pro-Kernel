@@ -74,18 +74,19 @@ refusal/write/readback logic, but not Android BusyBox or real block devices.
 
 ## GitHub Actions: generate the ColorOS ZIP
 
-1. Open **Build OnePlus 9 Pro ColorOS with Nix** in Actions.
-2. Select **Run workflow** and choose `oneplus-9-pro`.
-3. Check `package_twrp` and run the workflow.
-4. Download `twrp-experimental-oneplus-9-pro-coloros-nix-<run number>`.
-5. Extract the GitHub artifact wrapper.
+**ColorOS TWRP** builds and packages automatically after a relevant push to
+`oneplus-9-pro`. To build manually, open **ColorOS TWRP** in Actions, select
+**Run workflow**, and choose `oneplus-9-pro`. No input is required.
+
+Download `twrp-experimental-oneplus-9-pro-coloros-nix-<run number>` from the
+successful run and extract the GitHub artifact wrapper.
 
 The inner `*-twrp.zip` is the TWRP package. The adjacent `.zip.sha256`
 file checks that package. Do not flash the GitHub artifact wrapper.
 
 Nix compiles and packages only ColorOS. Before upload, the workflow checks the result
-against the registered stock boot. Without `package_twrp`, it uploads only
-the verified kernel review artifact. It publishes no GitHub Release.
+against the registered stock boot. The separate verified kernel review
+artifact is not flashable. The workflow publishes no GitHub Release.
 Artifacts expire after 14 days. Build and ABI checks do not verify device boot.
 
 See [Nix build and validation](nix-build.md).

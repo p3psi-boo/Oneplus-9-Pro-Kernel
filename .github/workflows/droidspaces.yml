@@ -1,11 +1,6 @@
-name: Build OnePlus 9 Pro ColorOS with Nix
+name: ColorOS TWRP
 on:
   workflow_dispatch:
-    inputs:
-      package_twrp:
-        description: Generate a ColorOS TWRP ZIP after stock boot and ABI verification
-        type: boolean
-        default: false
   push:
     branches: [oneplus-9-pro]
     paths:
@@ -111,7 +106,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Package the qualified ColorOS TWRP ZIP
-        if: github.event_name == 'workflow_dispatch' && inputs.package_twrp
         env:
           CI_RUN: ${{ github.run_id }}
         run: |
@@ -120,7 +114,6 @@ jobs:
             --built out/nix-coloros --qualified out/qualified-coloros \
             --output out/twrp-delivery --source-commit "$SOURCE_COMMIT" --run-id "$CI_RUN"
       - name: Upload the ColorOS TWRP ZIP and checksum
-        if: github.event_name == 'workflow_dispatch' && inputs.package_twrp
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: twrp-experimental-oneplus-9-pro-coloros-nix-${{ github.run_number }}
