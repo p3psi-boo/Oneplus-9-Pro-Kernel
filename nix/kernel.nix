@@ -49,6 +49,11 @@ EOF
       -Wl,--dynamic-linker,${stdenv.cc.bintools.dynamicLinker} \
       -Wl,-rpath,${lib.makeLibraryPath [ glibc protobufc stdenv.cc.cc.lib ]} "$@"
   '';
+  # Exported UAPI headers are checked in host C mode, not compiled into ARM
+  # kernel objects. Supply only host libc headers, with no linker/target flags.
+  hostUapiClang = writeShellScript "nix-host-uapi-clang" ''
+    exec clang -isystem ${lib.getDev glibc}/include "$@"
+  '';
   prepareSources = writeShellScript "prepare-kernel-shebangs" ''
     set -eo pipefail
     # Reuse stdenv's exact interpreter resolver after source integrity checks.
@@ -59,6 +64,10 @@ EOF
     # CC_CAN_LINK/UAPI_HEADER_TEST or change the target compiler flags.
     substituteInPlace "$1/init/Kconfig" \
       --replace-fail '$(srctree)/scripts/cc-can-link.sh $(CC)' '$(srctree)/scripts/cc-can-link.sh $(HOST_CLANG)'
+    # Keep the complete upstream HDRTEST command, warnings and Perl check.
+    # Only its host-mode compiler gets libc; target CC/CLANG_FLAGS stay intact.
+    substituteInPlace "$1/usr/include/Makefile" \
+      --replace-fail '$(CC) $(c_flags) -S -o /dev/null -x c /dev/null' '$(HOST_UAPI_CLANG) $(c_flags) -S -o /dev/null -x c /dev/null'
     substituteInPlace "$3/kernel/Kbuild" \
       --replace-fail 'GIT_BIN := /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git' 'GIT_BIN := git'
   '';
@@ -91,6 +100,7 @@ in stdenv.mkDerivation {
     mkdir -p "$HOME"
     export SOURCE_DATE_EPOCH=1735689600
     export HOST_CLANG=${hostClang}
+    export HOST_UAPI_CLANG=${hostUapiClang}
     python3 scripts/build.py --device oneplus-9-pro --os coloros --droidspaces \
       --kernel-source ${sources.kernel} --vendor-source ${sources.vendor} \
       --resukisu-source ${sources.resukisu} --clang-source ${sources.clang} \
@@ -117,7 +127,7 @@ PY
       test -s "$out/$required"
     done
   '';
-  passthru = { inherit sources prepareClang prepareSources hostClang crossAliases; };
+  passthru = { inherit sources prepareClang prepareSources hostClang hostUapiClang crossAliases; };
   meta = { platforms = [ "x86_64-linux" ]; license = lib.licenses.gpl2Only;
     description = "Sandbox-built experimental kernel; strict ABI repack and real-device validation remain separate gates"; };
 }
