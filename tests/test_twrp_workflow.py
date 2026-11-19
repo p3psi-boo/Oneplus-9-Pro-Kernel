@@ -9,18 +9,19 @@ class TwrpWorkflowTests(unittest.TestCase):
     def setUpClass(cls):
         cls.text = (ROOT / '.github/workflows/droidspaces.yml').read_text()
 
-    def test_only_opt_in_packaging_with_same_repo_label(self):
-        for value in ('type: boolean', 'default: false', "github.event.action == 'labeled'",
-                      "github.event.label.name == 'build-twrp'",
-                      'github.event.pull_request.head.repo.full_name == github.repository'):
+    def test_builds_only_the_default_branch_and_packages_by_dispatch(self):
+        for value in ('type: boolean', 'default: false', '  push:\n    branches: [oneplus-9-pro]',
+                      "if: github.ref == 'refs/heads/oneplus-9-pro'",
+                      "github.event_name == 'workflow_dispatch' && inputs.package_twrp"):
             self.assertIn(value, self.text)
-        self.assertEqual(self.text.count("if: env.PACKAGE_TWRP == 'true'"), 2)
+        self.assertNotIn('pull_request:', self.text)
         self.assertNotIn('pull_request_target:', self.text)
+        self.assertNotIn('build-twrp', self.text)
 
     def test_only_coloros_can_package_even_when_opted_in(self):
         gate = next(line.strip() for line in self.text.splitlines()
                     if line.strip().startswith("PACKAGE_TWRP:"))
-        self.assertIn("matrix.rom == 'coloros' && ((", gate)
+        self.assertIn("matrix.rom == 'coloros' &&", gate)
         self.assertEqual(self.text.count("if: env.PACKAGE_TWRP == 'true'"), 2)
         self.assertIn("name: twrp-experimental-oneplus-9-pro-coloros-", self.text)
         self.assertNotIn("twrp-experimental-oneplus-9-pro-oxygenos-", self.text)
@@ -40,7 +41,7 @@ class TwrpWorkflowTests(unittest.TestCase):
         self.assertLess(text.index('scripts/fetch_oneplus9pro_stock_boot.py --os'), text.index('"scripts/repack.py"'))
         self.assertLess(text.index('"scripts/repack.py"'), text.index('"scripts/package_twrp.py"'))
         for value in ('fw["stock_boot_sha256"]', 'lock["commit"]', '"--source-commit", commit',
-                      'github.event.pull_request.head.sha || github.sha', 'out/twrp-delivery/*.zip.sha256',
+                      'ref: ${{ github.sha }}', 'out/twrp-delivery/*.zip.sha256',
                       'if-no-files-found: error', 'rom: [coloros, oxygenos]'):
             self.assertIn(value, text)
 

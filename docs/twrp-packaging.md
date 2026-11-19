@@ -105,11 +105,8 @@ fetches the exact official stock boot, verifies the boot and ABI, and uploads a
 TWRP package. The OxygenOS job produces a raw kernel review artifact only.
 The workflow publishes no GitHub Release. ZIP artifacts expire after 14 days.
 
-A maintainer can also add the `build-twrp` label to a same-repository PR that
-targets `oneplus-9-pro`. Only the label event enables packaging. Updating the
-PR does not repeat that event. Remove and re-add the label to package a new
-revision. GitHub may require approval for selected workflow runs.
-
-Without `package_twrp` or a matching label event, the workflow produces only
-raw kernel review artifacts. An OTA download or validation failure leaves no
+The workflow builds only from the default branch, `oneplus-9-pro`. A push
+that changes build or packaging files runs compile checks. To generate the
+ColorOS TWRP package, run the workflow manually with `package_twrp` enabled.
+An OTA download or validation failure leaves no
 TWRP package. The build and packaging checks do not verify device boot.

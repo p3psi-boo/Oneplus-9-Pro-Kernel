@@ -16,7 +16,7 @@ GitHub Actions 只为 ColorOS `LE2120_14.0.0.1901(CN01)` 生成 TWRP 安装包�
 
 ## 获取安装包
 
-在 [GitHub Actions](https://github.com/p3psi-boo/Oneplus-9-Pro-Kernel/actions/workflows/droidspaces.yml) 运行构建时勾选 `package_twrp`。运行成功后，在产物中下载内层 `*-twrp.zip` 和对应的 SHA-256 校验文件。
+在 [GitHub Actions](https://github.com/p3psi-boo/Oneplus-9-Pro-Kernel/actions/workflows/droidspaces.yml) 选择默认分支 `oneplus-9-pro`。勾选 `package_twrp`。运行成功后，在产物中下载内层 `*-twrp.zip` 和对应的 SHA-256 校验文件。
 
 - [TWRP 安装与恢复说明](docs/twrp-packaging.md)
 - [Droidspaces 与 ranet3 说明](docs/droidspaces.md)
