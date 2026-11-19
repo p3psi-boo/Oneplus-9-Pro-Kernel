@@ -1,7 +1,7 @@
 # 用 Nix 构建一加 9 Pro 内核
 
 Nix 路径面向 `x86_64-linux`。产物是一加 9 Pro 的 ARM64 内核。
-它只构建 ColorOS 的 Droidspaces 配置，不替换默认构建路径。
+GitHub Actions 只用这套工具链构建 ColorOS 的 Droidspaces 配置。
 在 macOS 上使用时，必须进入 x86_64 Linux 环境。
 
 ## 本地开发
@@ -33,23 +33,19 @@ Nix 可以复用相同输入的构建产物。本项目不要求外部二进制�
 
 ## 在 GitHub Actions 验证和打包
 
-1. 打开「Build OnePlus 9 Pro Droidspaces (experimental)」。
+1. 打开「Build OnePlus 9 Pro ColorOS with Nix」。
 2. 选择 `oneplus-9-pro`。
-3. 勾选 `nix_coloros`。
-4. 如需 TWRP 安装包，再勾选 `package_twrp`。
+3. 勾选 `package_twrp`，运行工作流。
 
-该运行先构建常规 ColorOS 内核。Nix 作业使用该产物作对照。
-它不编译 OxygenOS。常规推送仍检查两套固件的编译。
-它核对两份内核的有效配置和内核版本。
-它还分别核对官方 ColorOS 内核的 13,797 个导出符号及其 CRC。
-它把结果写入 `nix-coloros-parity-*` 产物。
+推送也会触发 Nix 编译。推送触发的运行不生成 TWRP 安装包。
+工作流只编译 ColorOS，不用常规构建作回退。
 
-如果任一检查失败，工作流不生成 Nix TWRP 安装包，也不回退到常规产物。
-如果检查通过且勾选 `package_twrp`，工作流才用现有方法打包。
-安装包位于 `twrp-experimental-oneplus-9-pro-coloros-nix-*` 产物。
-安装包仍须通过精确固件、模块签名和引导镜像校验。
-取消勾选 `nix_coloros`，可以使用默认打包路径。
+工作流核对内核配置、版本和签名检查设置。
+工作流核对官方 ColorOS 内核的 13,797 个导出符号及其 CRC。
+任何校验失败时，工作流不上传成品。
+校验通过后，工作流上传 `nix-coloros-verified-kernel-*` 产物。
+勾选 `package_twrp` 时，工作流另行上传 `twrp-experimental-oneplus-9-pro-coloros-nix-*`。
 
-详见 [TWRP 安装与恢复说明](twrp-packaging.md)。
-ABI 对照不要求两个内核文件逐字节相同。
-ABI 对照不验证真机启动。
+本地也可以用 `scripts/verify_nix_coloros.py` 对照两份构建。
+该对照要求提供一份常规构建和一份 Nix 构建。
+ABI 校验不验证真机启动。详见 [TWRP 安装与恢复说明](twrp-packaging.md)。

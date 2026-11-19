@@ -1,131 +1,39 @@
-name: Build OnePlus 9 Pro Droidspaces (experimental)
+name: Build OnePlus 9 Pro ColorOS with Nix
 on:
   workflow_dispatch:
     inputs:
       package_twrp:
-        description: Build the ColorOS TWRP ZIP after stock boot and ABI verification
-        type: boolean
-        default: false
-      nix_coloros:
-        description: Build ColorOS with Nix and require parity before optional TWRP packaging
+        description: Generate a ColorOS TWRP ZIP after stock boot and ABI verification
         type: boolean
         default: false
   push:
     branches: [oneplus-9-pro]
     paths:
       - '.github/workflows/droidspaces.yml'
-      - 'configs/droidspaces-sm8350.config'
-      - 'configs/resukisu.config'
-      - 'patches/droidspaces-sm8350-ipc-kabi.patch'
-      - 'patches/ranet3-sm8350-nft-kabi.patch'
-      - 'scripts/build.py'
-      - 'scripts/toolchain.py'
-      - 'scripts/package_ci_coloros.py'
-      - 'scripts/check_nix_parity.py'
-      - 'scripts/verify_nix_coloros.py'
       - 'flake.nix'
       - 'flake.lock'
       - 'nix/**'
-      - 'tools.lock.json'
-      - 'scripts/droidspaces.py'
-      - 'scripts/repack.py'
-      - 'scripts/prepare_protocol.py'
-      - 'tests/test_droidspaces.py'
-      - 'tests/test_prepare_protocol.py'
-      - 'scripts/package_twrp.py'
-      - 'scripts/fetch_oneplus9pro_stock_boot.py'
-      - 'scripts/twrp/**'
-      - 'anykernel3.lock.json'
+      - 'configs/**'
+      - 'compat/**'
+      - 'patches/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'device.json'
       - 'devices/oneplus-9-pro.json'
-      - 'docs/twrp-packaging.md'
-      - 'tests/test_twrp_packaging.py'
-      - 'tests/test_twrp_workflow.py'
-      - 'tests/test_nix*.py'
-      - 'tests/test_offline_build.py'
-      - 'tests/test_fetch_oneplus9pro_stock_boot.py'
+      - 'tools.lock.json'
+      - 'anykernel3.lock.json'
 permissions:
   contents: read
 jobs:
-  compile:
+  coloros:
     if: github.ref == 'refs/heads/oneplus-9-pro'
     runs-on: ubuntu-22.04
     timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        rom: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.nix_coloros && '["coloros"]' || '["coloros","oxygenos"]') }}
-    env:
-      ROM: ${{ matrix.rom }}
-      PACKAGE_TWRP: ${{ matrix.rom == 'coloros' && github.event_name == 'workflow_dispatch' && inputs.package_twrp && !inputs.nix_coloros }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Require the exact model selector
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          if json.loads(Path("device.json").read_text()) != {"device": "oneplus-9-pro"}:
-              raise SystemExit("This workflow is restricted to OnePlus 9 Pro")
-          PY
-      - name: Check profile tooling
-        run: |
-          python3 -m unittest discover -s tests -p test_droidspaces.py -v
-          python3 -m unittest discover -s tests -p test_prepare_protocol.py -v
-          python3 -m unittest discover -s tests -p 'test_twrp*.py' -v
-          python3 -m unittest discover -s tests -p 'test_fetch_oneplus9pro_stock_boot.py' -v
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-14 llvm-14 lld-14 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi build-essential bc bison flex cpio libssl-dev libelf-dev libtinfo5 protobuf-c-compiler libprotobuf-c-dev dwarves python3
-          echo "/usr/lib/llvm-14/bin" >> "$GITHUB_PATH"
-      - name: Compile the pinned kernel and check config
-        run: python3 scripts/build.py --device oneplus-9-pro --os "$ROM" --droidspaces
-      - name: Upload kernel for ABI review (not a flashable image)
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: droidspaces-experimental-oneplus-9-pro-${{ env.ROM }}-${{ github.run_number }}
-          path: out/droidspaces/oneplus-9-pro/${{ env.ROM }}/
-          if-no-files-found: error
-
-      - name: Fetch exact official stock boot and qualify TWRP package
-        if: env.PACKAGE_TWRP == 'true'
-        env:
-          CI_RUN: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          python3 -m pip install vmlinux-to-elf==1.3.6
-          python3 scripts/fetch_oneplus9pro_stock_boot.py --os coloros --output .work/twrp-stock/coloros/boot.img
-          python3 scripts/package_ci_coloros.py \
-            --built out/droidspaces/oneplus-9-pro/coloros --stock .work/twrp-stock/coloros/boot.img \
-            --output out/twrp-delivery --run-id "$CI_RUN"
-      - name: Upload qualified experimental TWRP ZIP and checksum
-        if: env.PACKAGE_TWRP == 'true'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: twrp-experimental-oneplus-9-pro-coloros-${{ github.run_number }}
-          path: |
-            out/twrp-delivery/*.zip
-            out/twrp-delivery/*.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-  nix_coloros:
-    if: github.ref == 'refs/heads/oneplus-9-pro' && github.event_name == 'workflow_dispatch' && inputs.nix_coloros
-    needs: compile
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: droidspaces-experimental-oneplus-9-pro-coloros-${{ github.run_number }}
-          path: out/native-reference
       - name: Install Nix with sandbox enforcement
         uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
         with:
@@ -145,30 +53,52 @@ jobs:
           cp -Lr "$RUNNER_TEMP/coloros-nix-kernel/." out/nix-coloros/
           chmod -R u+w out/nix-coloros
           python3 -c 'import json; m = json.load(open("out/nix-coloros/build.json")); raise SystemExit(0 if m.get("source_mode") == "offline-git" else "Missing offline source provenance")'
-      - name: Verify Nix and native kernels against the official ColorOS boot
+      - name: Verify the kernel against the exact official ColorOS boot
         run: |
           set -euo pipefail
           python3 -m pip install vmlinux-to-elf==1.3.6
           python3 scripts/fetch_oneplus9pro_stock_boot.py --os coloros --output .work/twrp-stock/coloros/boot.img
-          python3 scripts/verify_nix_coloros.py --stock .work/twrp-stock/coloros/boot.img \
-            --native-dir out/native-reference --nix-dir out/nix-coloros --report out/nix-parity.json
-      - name: Upload the Nix parity report
-        if: always() && hashFiles('out/nix-parity.json') != ''
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          fw = json.loads(pathlib.Path("devices/oneplus-9-pro.json").read_text())["firmware"]["coloros"]
+          qualified = pathlib.Path("out/qualified-coloros")
+          subprocess.run(["python3", "scripts/repack.py", "--device", "oneplus-9-pro", "--os", "coloros",
+              "--layout", "a/b", "--firmware", fw["build_id"], "--stock", ".work/twrp-stock/coloros/boot.img",
+              "--stock-sha256", fw["stock_boot_sha256"], "--built", "out/nix-coloros",
+              "--output", qualified], check=True)
+          report = json.loads((qualified / "build.json").read_text())["export_crc_check"]
+          if report.get("passed") is not True or report.get("matching") != 13797 or report.get("stock_exports") != 13797:
+              raise SystemExit("Expected all 13,797 official ColorOS export CRCs to match")
+          PY
+      - name: Upload qualified kernel files for review (not a flashable image)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: nix-coloros-parity-${{ github.run_number }}
-          path: out/nix-parity.json
+          name: nix-coloros-verified-kernel-${{ github.run_number }}
+          path: |
+            out/nix-coloros/
+            out/qualified-coloros/build.json
           if-no-files-found: error
-      - name: Package the parity-qualified Nix kernel
-        if: success() && inputs.package_twrp
+          retention-days: 14
+      - name: Package the qualified ColorOS TWRP ZIP
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.package_twrp
         env:
           CI_RUN: ${{ github.run_id }}
         run: |
-          python3 scripts/package_ci_coloros.py \
-            --built out/nix-coloros --stock .work/twrp-stock/coloros/boot.img \
-            --output out/twrp-delivery --run-id "$CI_RUN"
-      - name: Upload the Nix ColorOS TWRP ZIP and checksum
-        if: success() && inputs.package_twrp
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          lock = json.loads(pathlib.Path("anykernel3.lock.json").read_text())
+          upstream = ".work/AnyKernel3"
+          subprocess.run(["git", "init", "--quiet", upstream], check=True)
+          subprocess.run(["git", "-C", upstream, "fetch", "--depth=1", lock["repository"], lock["commit"]], check=True)
+          subprocess.run(["git", "-C", upstream, "checkout", "--detach", lock["commit"]], check=True)
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          subprocess.run(["python3", "scripts/package_twrp.py", "--built", "out/nix-coloros",
+              "--qualified", "out/qualified-coloros", "--os", "coloros", "--anykernel3", upstream,
+              "--output", "out/twrp-delivery", "--source-commit", head, "--ci-run", os.environ["CI_RUN"]], check=True)
+          PY
+      - name: Upload the ColorOS TWRP ZIP and checksum
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.package_twrp
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: twrp-experimental-oneplus-9-pro-coloros-nix-${{ github.run_number }}

@@ -10,7 +10,7 @@
 
 ## 适用范围
 
-GitHub Actions 只为 ColorOS `LE2120_14.0.0.1901(CN01)` 生成 TWRP 安装包。OxygenOS 仍参加编译检查，不生成 TWRP 安装包。
+GitHub Actions 用 Nix 构建内核。它只为 ColorOS `LE2120_14.0.0.1901(CN01)` 生成产物。
 
 **注意：** 刷入前必须备份原厂 `boot.img`。安装包要求解锁引导程序。当前槽的引导镜像必须保持原厂状态。真机启动未验证。
 

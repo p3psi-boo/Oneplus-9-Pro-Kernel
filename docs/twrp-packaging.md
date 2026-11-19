@@ -91,27 +91,18 @@ BusyBox or real block-device behavior. No device flashing was performed.
 
 ## GitHub Actions: generate the ColorOS ZIP
 
-1. Open **Build OnePlus 9 Pro Droidspaces (experimental)** in Actions.
+1. Open **Build OnePlus 9 Pro ColorOS with Nix** in Actions.
 2. Select **Run workflow** and choose `oneplus-9-pro`.
-3. Check `package_twrp`.
-4. Download `twrp-experimental-oneplus-9-pro-coloros-<run number>`.
+3. Check `package_twrp` and run the workflow.
+4. Download `twrp-experimental-oneplus-9-pro-coloros-nix-<run number>`.
 5. Extract the GitHub artifact wrapper.
-
-The default path uses the native build. To opt in to the Nix build, also select
-`nix_coloros`. The Nix workflow checks parity before it can upload a ZIP.
-See [Nix build and validation](nix-build.md).
 
 The inner `*-twrp.zip` is the TWRP package. The adjacent `.zip.sha256`
 file checks that package. Do not flash the GitHub artifact wrapper.
 
-Regular compile checks build both ROM variants. An opt-in Nix run builds
-only ColorOS. Only the ColorOS job
-fetches the exact official stock boot, verifies the boot and ABI, and uploads a
-TWRP package. The OxygenOS job produces a raw kernel review artifact only.
-The workflow publishes no GitHub Release. ZIP artifacts expire after 14 days.
+Nix compiles only ColorOS. Before upload, the workflow checks the result
+against the registered stock boot. Without `package_twrp`, it uploads only
+the verified kernel review artifact. It publishes no GitHub Release.
+Artifacts expire after 14 days. Build and ABI checks do not verify device boot.
 
-The workflow builds only from the default branch, `oneplus-9-pro`. A push
-that changes build or packaging files runs compile checks. To generate the
-ColorOS TWRP package, run the workflow manually with `package_twrp` enabled.
-An OTA download or validation failure leaves no
-TWRP package. The build and packaging checks do not verify device boot.
+See [Nix build and validation](nix-build.md).
