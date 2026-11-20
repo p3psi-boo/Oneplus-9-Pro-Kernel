@@ -1,7 +1,7 @@
 # Pure validation shared with host tests. No I/O or writes here.
 guard_facts() {
   [ "$FACT_TWRP" != '' ] || return 1
-  [ "$FACT_DEVICE" = lemonadep ] || return 1
+  case "$FACT_DEVICE" in lemonadep|OnePlus9Pro) ;; *) return 1 ;; esac
   case "$FACT_FLASH_LOCKED" in ''|0) ;; *) return 1 ;; esac
   case "$FACT_DEVICE_STATE" in ''|unlocked) ;; *) return 1 ;; esac
   [ "$FACT_FLASH_LOCKED" = 0 ] || [ "$FACT_DEVICE_STATE" = unlocked ] || return 1
