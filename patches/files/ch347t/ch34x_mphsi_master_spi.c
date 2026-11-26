@@ -1452,7 +1452,7 @@ static int ch347_spi_setup(struct spi_device *spi)
 	}
 #endif
 
-	switch (spi->mode & SPI_MODE_X_MASK) {
+	switch (spi->mode & (SPI_CPOL | SPI_CPHA)) {
 	case SPI_MODE_0:
 		spicfg.imode = 0;
 		break;
@@ -1739,7 +1739,7 @@ static int ch9341_spi_setup(struct spi_device *spi)
 	}
 #endif
 
-	switch (spi->mode & SPI_MODE_X_MASK) {
+	switch (spi->mode & (SPI_CPOL | SPI_CPHA)) {
 	case SPI_MODE_0:
 		spicfg.control |= 0 << 6;
 		break;
