@@ -431,6 +431,8 @@ def build(name, config=None, rom='coloros', diagnostics_only=False, with_droidsp
         print("ABI type diagnostics only; no kernel image produced.")
         return
     run(*options, job_option, "Image", env=env)
+    if with_droidspaces:
+        droidspaces.verify_ch347t_linked(output)
     actual_release = (output / "include/config/kernel.release").read_text().strip()
     if actual_release != release:
         raise ValueError("Kernel release mismatch: expected %r, got %r" % (release, actual_release))

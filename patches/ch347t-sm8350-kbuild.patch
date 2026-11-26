@@ -1,0 +1,20 @@
+--- a/drivers/usb/misc/Kconfig
++++ b/drivers/usb/misc/Kconfig
+@@ -275,3 +275,10 @@
+ 	select USB_REDRIVER
+ 	help
+ 	  Say Y here if you want to support USB super speed re-driver NB7VPQ904M.
++
++config USB_CH347T_MPHSI
++	bool "WCH CH347T USB SPI/GPIO bridge (CC1101 CS0)"
++	depends on USB && SPI_MASTER && SPI_SPIDEV=y && GPIOLIB
++	help
++	  Enable the CH347T in Mode 1 on the OnePlus ColorOS kernel.
++	  It creates a userspace SPI device on chip-select 0 for a CC1101.
+--- a/drivers/usb/misc/Makefile
++++ b/drivers/usb/misc/Makefile
+@@ -31,3 +31,4 @@
+ obj-$(CONFIG_USB_SISUSBVGA)		+= sisusbvga/
+ obj-$(CONFIG_USB_LINK_LAYER_TEST)	+= lvstest.o
+ obj-$(CONFIG_USB_REDRIVER_NB7VPQ904M)	+= ssusb-redriver-nb7vpq904m.o
++obj-$(CONFIG_USB_CH347T_MPHSI)	+= ch347t/

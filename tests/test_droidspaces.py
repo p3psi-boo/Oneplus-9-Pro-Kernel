@@ -61,6 +61,26 @@ class DroidspacesProfileTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, name):
                         droidspaces.verify_config(cfg, stock)
 
+    def test_requires_builtin_ch347t_and_linked_probe(self):
+        firmware = device("oneplus-9-pro")["firmware"]["coloros"]
+        stock = ROOT / firmware["config"]
+        with tempfile.TemporaryDirectory() as temp:
+            out = pathlib.Path(temp)
+            cfg = out / ".config"
+            cfg.write_bytes(stock.read_bytes())
+            droidspaces.merge_config(cfg)
+            droidspaces.verify_config(cfg, stock)
+            cfg.write_text(cfg.read_text().replace("CONFIG_USB_CH347T_MPHSI=y",
+                                                  "CONFIG_USB_CH347T_MPHSI=m"))
+            with self.assertRaisesRegex(ValueError, "CONFIG_USB_CH347T_MPHSI"):
+                droidspaces.verify_config(cfg, stock)
+            system_map = out / "System.map"
+            system_map.write_text("ffffff8008010000 t ch34x_usb_probe.cfi\n")
+            droidspaces.verify_ch347t_linked(out)
+            system_map.write_text("ffffff8008010000 t unrelated_probe\n")
+            with self.assertRaisesRegex(ValueError, "Built-in CH347T"):
+                droidspaces.verify_ch347t_linked(out)
+
     def test_protocol_crc_fails_closed_before_the_full_build(self):
         with tempfile.TemporaryDirectory() as temp:
             output = pathlib.Path(temp)

@@ -25,7 +25,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   coloros:
-    if: github.ref == 'refs/heads/oneplus-9-pro'
+    # Manual validation of a branch runs the same build and ABI gates.
+    # Only the normal branch may produce a flashable archive.
+    if: github.ref == 'refs/heads/oneplus-9-pro' || (github.event_name == 'workflow_dispatch' && github.ref_type == 'branch')
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     env:
@@ -106,6 +108,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Package the qualified ColorOS TWRP ZIP
+        if: github.ref == 'refs/heads/oneplus-9-pro'
         env:
           CI_RUN: ${{ github.run_id }}
         run: |
@@ -114,6 +117,7 @@ jobs:
             --built out/nix-coloros --qualified out/qualified-coloros \
             --output out/twrp-delivery --source-commit "$SOURCE_COMMIT" --run-id "$CI_RUN"
       - name: Upload the ColorOS TWRP ZIP and checksum
+        if: github.ref == 'refs/heads/oneplus-9-pro'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: twrp-experimental-oneplus-9-pro-coloros-nix-${{ github.run_number }}

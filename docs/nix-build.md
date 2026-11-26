@@ -35,7 +35,7 @@ nix build --no-update-lock-file --option sandbox true --option sandbox-fallback 
 
 ## 在 GitHub Actions 验证和打包
 
-推送构建相关改动到 `oneplus-9-pro` 会触发「ColorOS TWRP」。也可以在 Actions 中选择该分支并手动运行。两种方式都会在校验通过后生成 TWRP 安装包。工作流只构建 ColorOS，没有常规构建回退。
+推送构建相关改动到 `oneplus-9-pro` 会触发「ColorOS TWRP」。也可以在 Actions 中选择该分支并手动运行。两种方式在主分支都能生成 TWRP 安装包。手动选择其他分支可跑同一套编译和 ABI 校验，只上传供审查的内核文件，不生成刷机包。工作流只构建 ColorOS，没有常规构建回退。
 
 工作流核对内核配置、版本和签名检查设置。
 工作流核对官方 ColorOS 内核的 13,797 个导出符号及其 CRC。
