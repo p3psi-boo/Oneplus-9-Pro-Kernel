@@ -52,6 +52,25 @@ create the TUN interface, install IPv4/IPv6 routes with `cap.table`,
 check the inet nftables rules with an overlay configured, and pass traffic
 in both directions. Build/ABI checks do not replace this test.
 
+## Home Assistant: Matter over Thread (experimental)
+
+Use an existing Thread border router. Put the Matter Server, border router,
+and commissioning phone on the same LAN or VLAN. Give Matter Server direct
+access to that link; if using Docker, use host networking on a LAN-connected
+namespace. Do not expect the LAN's link-local mDNS (`ff02::fb`, UDP 5353) to
+cross NAT or a routed WireGuard tunnel.
+
+Allow ICMPv6 and mDNS on the LAN interface. If Linux handles router
+advertisements, set `accept_ra=1` and `accept_ra_rt_info_max_plen=64` for that
+interface in Matter Server's network namespace. Use `accept_ra=2` only if the
+namespace already forwards IPv6. If a network manager handles advertisements,
+verify that it installs the Thread route. Do not change global Android defaults.
+See [Matter Server networking requirements](https://github.com/matter-js/python-matter-server/blob/main/docs/os_requirements.md).
+
+On the phone, verify that Matter Server can discover the border router via
+mDNS, find an IPv6 route to a Thread device, and pair and control the device.
+This profile does not configure the phone as a Thread border router.
+
 ## TWRP installation ZIPs (experimental)
 
 See [the OnePlus 9 Pro TWRP packaging and installation notes](twrp-packaging.md).
