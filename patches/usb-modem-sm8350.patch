@@ -1,0 +1,22 @@
+--- a/drivers/usb/serial/option.c
++++ b/drivers/usb/serial/option.c
+@@ -1162,6 +1162,9 @@
+ 	  .driver_info = RSVD(4) },
+ 	{ USB_DEVICE(UBLOX_VENDOR_ID, 0x1343),		/* u-blox LARA-L6 (ECM) */
+ 	  .driver_info = RSVD(4) },
++	{ USB_DEVICE_AND_INTERFACE_INFO(0x2ca3, 0x4006, 0xff, 0xff, 0xff),
++	  .driver_info = NUMEP2 },
++	{ USB_DEVICE_AND_INTERFACE_INFO(0x2ca3, 0x4006, 0xff, 0x00, 0x00) },
+ 	/* Quectel products using Quectel vendor ID */
+ 	{ USB_DEVICE_AND_INTERFACE_INFO(QUECTEL_VENDOR_ID, QUECTEL_PRODUCT_EC21, 0xff, 0xff, 0xff),
+ 	  .driver_info = NUMEP2 },
+--- a/drivers/net/usb/qmi_wwan.c
++++ b/drivers/net/usb/qmi_wwan.c
+@@ -1041,6 +1041,7 @@
+ 		USB_DEVICE_AND_INTERFACE_INFO(0x03f0, 0x581d, USB_CLASS_VENDOR_SPEC, 1, 7),
+ 		.driver_info = (unsigned long)&qmi_wwan_info,
+ 	},
++	{QMI_MATCH_FF_FF_FF(0x2ca3, 0x4006)},
+ 	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0125)},	/* Quectel EC25, EC20 R2.0  Mini PCIe */
+ 	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0306)},	/* Quectel EP06/EG06/EM06 */
+ 	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0512)},	/* Quectel EG12/EM12 */

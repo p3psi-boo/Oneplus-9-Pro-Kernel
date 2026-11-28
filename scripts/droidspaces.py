@@ -9,6 +9,7 @@ UPSTREAM = "cdadb9eb5d0f86aacffff60776333e6f6b73a30a"
 PATCH = ROOT / "patches/droidspaces-sm8350-ipc-kabi.patch"
 NFT_PATCH = ROOT / "patches/ranet3-sm8350-nft-kabi.patch"
 CH347T_PATCH = ROOT / "patches/ch347t-sm8350-kbuild.patch"
+MODEM_PATCH = ROOT / "patches/usb-modem-sm8350.patch"
 CH347T_SOURCE = ROOT / "patches/files/ch347t"
 CH347T_UPSTREAM = "57be7ed01e2adb14d34bcca5e1eb71ff6247aba7"
 CH347T_FILES = ("Makefile", "ch34x_mphsi.h", "ch34x_mphsi_master_gpio.c",
@@ -67,7 +68,7 @@ def require_device(data):
 
 
 def apply_patch(source):
-    patches = (PATCH, NFT_PATCH, CH347T_PATCH)
+    patches = (PATCH, NFT_PATCH, CH347T_PATCH, MODEM_PATCH)
     run("git", "apply", "--check", *patches, cwd=source)
     run("git", "apply", *patches, cwd=source)
     destination = source / "drivers/usb/misc/ch347t"
@@ -94,6 +95,7 @@ def verify_protocol_crc(output):
 def profile():
     return {"upstream_commit": UPSTREAM, "patch_sha256": sha256(PATCH),
             "nft_kabi_patch_sha256": sha256(NFT_PATCH),
+            "modem_patch_sha256": sha256(MODEM_PATCH),
             "config_fragment_sha256": sha256(CONFIG),
             "ch347t": {"upstream_commit": CH347T_UPSTREAM,
                        "kbuild_patch_sha256": sha256(CH347T_PATCH),
